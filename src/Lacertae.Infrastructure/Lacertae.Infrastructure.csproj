@@ -1,6 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <EmbeddedResource Include="Storage\Migrations\*.sql" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Lacertae.Domain\Lacertae.Domain.csproj" />
     <ProjectReference Include="..\Lacertae.Application\Lacertae.Application.csproj" />
     <PackageReference Include="Microsoft.Extensions.Http" />
