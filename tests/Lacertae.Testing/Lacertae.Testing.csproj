@@ -1,3 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lacertae.Application\Lacertae.Application.csproj" />
+  </ItemGroup>
 </Project>
