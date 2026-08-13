@@ -1,0 +1,15 @@
+{
+  "id": "fixture-child",
+  "inheritsFrom": "fixture-base",
+  "type": "release",
+  "time": "2026-01-02T00:00:00Z",
+  "releaseTime": "2026-01-02T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "arguments": {
+    "game": [
+      "--demo"
+    ],
+    "jvm": []
+  },
+  "libraries": []
+}

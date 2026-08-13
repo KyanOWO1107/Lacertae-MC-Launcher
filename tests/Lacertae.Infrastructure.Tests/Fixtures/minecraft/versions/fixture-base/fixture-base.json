@@ -1,0 +1,16 @@
+{
+  "id": "fixture-base",
+  "type": "release",
+  "time": "2026-01-01T00:00:00Z",
+  "releaseTime": "2026-01-01T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "javaVersion": {
+    "component": "java-runtime-gamma",
+    "majorVersion": 17
+  },
+  "arguments": {
+    "game": [],
+    "jvm": []
+  },
+  "libraries": []
+}
