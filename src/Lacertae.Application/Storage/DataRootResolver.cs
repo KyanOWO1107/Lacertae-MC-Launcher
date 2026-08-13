@@ -1,10 +1,11 @@
+using Lacertae.Application.Startup;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Storage;
 
 namespace Lacertae.Application.Storage;
 
-public sealed class DataRootResolver(IPlatformPaths platformPaths, IFileSystem fileSystem)
+public sealed class DataRootResolver(IPlatformPaths platformPaths, IFileSystem fileSystem) : IStartupDataRootResolver
 {
     public Result<DataRoot> Resolve()
     {

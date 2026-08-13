@@ -1,6 +1,8 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Lacertae.Domain.Results;
 
 namespace Lacertae.Desktop;
 
@@ -15,12 +17,23 @@ public sealed class App : Avalonia.Application, IDisposable
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             compositionRoot = new CompositionRoot();
-            desktop.MainWindow = compositionRoot.CreateMainWindow();
             desktop.Exit += (_, _) => compositionRoot.Dispose();
+            _ = InitializeDesktopAsync(desktop, compositionRoot);
         }
 
         base.OnFrameworkInitializationCompleted();
     }
 
     public void Dispose() => compositionRoot?.Dispose();
+
+    private static async Task InitializeDesktopAsync(
+        IClassicDesktopStyleApplicationLifetime desktop,
+        CompositionRoot compositionRoot)
+    {
+        Result<Lacertae.Application.Startup.StartupState> result =
+            await compositionRoot.InitializeAsync(CancellationToken.None);
+        desktop.MainWindow = result.IsSuccess
+            ? compositionRoot.CreateMainWindow()
+            : CompositionRoot.CreateRecoveryWindow(result.Problem!);
+    }
 }

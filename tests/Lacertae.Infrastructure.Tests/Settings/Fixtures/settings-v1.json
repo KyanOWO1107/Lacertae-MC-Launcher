@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "theme": "dark",
+  "selectedGameRootId": "root-1",
+  "selectedVersionFolder": "fixture-child",
+  "defaultAccountId": null,
+  "globalJavaPath": null,
+  "isolationPolicy": "modLoaderOrNonRelease",
+  "checkUpdatesOnStartup": true
+}
