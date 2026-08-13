@@ -1,0 +1,20 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Lacertae.Application/Lacertae.Application.csproj" />
+    <Project Path="src/Lacertae.Desktop/Lacertae.Desktop.csproj" />
+    <Project Path="src/Lacertae.Domain/Lacertae.Domain.csproj" />
+    <Project Path="src/Lacertae.Infrastructure/Lacertae.Infrastructure.csproj" />
+    <Project Path="src/Lacertae.Platform.Windows/Lacertae.Platform.Windows.csproj" />
+    <Project Path="src/Lacertae.Updater/Lacertae.Updater.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Lacertae.Application.Tests/Lacertae.Application.Tests.csproj" />
+    <Project Path="tests/Lacertae.Architecture.Tests/Lacertae.Architecture.Tests.csproj" />
+    <Project Path="tests/Lacertae.Desktop.Tests/Lacertae.Desktop.Tests.csproj" />
+    <Project Path="tests/Lacertae.Domain.Tests/Lacertae.Domain.Tests.csproj" />
+    <Project Path="tests/Lacertae.Infrastructure.Tests/Lacertae.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Lacertae.Platform.Windows.Tests/Lacertae.Platform.Windows.Tests.csproj" />
+    <Project Path="tests/Lacertae.Testing/Lacertae.Testing.csproj" />
+    <Project Path="tests/Lacertae.Updater.Tests/Lacertae.Updater.Tests.csproj" />
+  </Folder>
+</Solution>
