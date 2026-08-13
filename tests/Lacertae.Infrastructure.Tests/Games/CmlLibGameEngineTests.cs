@@ -11,9 +11,9 @@ public sealed class CmlLibGameEngineTests
     {
         string gameRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures", "minecraft");
         string beforeHash = HashDirectory(gameRoot);
-        CmlLibGameEngine engine = new(gameRoot);
+        CmlLibGameEngine engine = new();
 
-        var result = await engine.InspectLocalVersionsAsync(TestContext.Current.CancellationToken);
+        var result = await engine.InspectLocalVersionsAsync(gameRoot, TestContext.Current.CancellationToken);
 
         string afterHash = HashDirectory(gameRoot);
         Assert.True(result.IsSuccess, result.Problem?.Code);
@@ -22,6 +22,22 @@ public sealed class CmlLibGameEngineTests
         Assert.Equal(17, child.Java.MajorVersion);
         Assert.Equal("release", child.VersionType);
         Assert.Equal(beforeHash, afterHash);
+    }
+
+    [Fact]
+    public async Task InspectLocalVersionsDetectsOnlyKnownLoaderCoordinates()
+    {
+        string gameRoot = Path.Combine(AppContext.BaseDirectory, "Fixtures", "minecraft");
+        var result = await new CmlLibGameEngine().InspectLocalVersionsAsync(
+            gameRoot,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.True(result.Value.Single(version => version.FolderName == "fixture-fabric").HasModLoader);
+        Assert.True(result.Value.Single(version => version.FolderName == "fixture-forge").HasModLoader);
+        Assert.True(result.Value.Single(version => version.FolderName == "fixture-neoforge").HasModLoader);
+        Assert.True(result.Value.Single(version => version.FolderName == "fixture-quilt").HasModLoader);
+        Assert.False(result.Value.Single(version => version.FolderName == "fixture-unknown-loader").HasModLoader);
     }
 
     private static string HashDirectory(string directory)

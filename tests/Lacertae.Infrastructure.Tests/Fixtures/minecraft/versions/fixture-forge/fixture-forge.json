@@ -1,0 +1,13 @@
+{
+  "id": "fixture-forge",
+  "inheritsFrom": "fixture-base",
+  "type": "release",
+  "time": "2026-01-04T00:00:00Z",
+  "releaseTime": "2026-01-04T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "libraries": [
+    {
+      "name": "net.minecraftforge:forge:1.21-51.0.0"
+    }
+  ]
+}

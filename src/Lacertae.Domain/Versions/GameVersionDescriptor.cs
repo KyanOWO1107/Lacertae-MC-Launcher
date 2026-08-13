@@ -6,4 +6,5 @@ public sealed record GameVersionDescriptor(
     string DisplayName,
     string VersionType,
     string? InheritsFrom,
-    JavaRequirement Java);
+    JavaRequirement Java,
+    bool HasModLoader = false);

@@ -6,5 +6,6 @@ namespace Lacertae.Application.Games;
 public interface IGameEngine
 {
     Task<Result<IReadOnlyList<GameVersionDescriptor>>> InspectLocalVersionsAsync(
+        string gameRootPath,
         CancellationToken cancellationToken);
 }

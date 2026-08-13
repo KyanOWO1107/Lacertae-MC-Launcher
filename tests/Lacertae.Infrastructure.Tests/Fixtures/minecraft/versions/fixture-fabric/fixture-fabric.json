@@ -1,0 +1,13 @@
+{
+  "id": "fixture-fabric",
+  "inheritsFrom": "fixture-base",
+  "type": "release",
+  "time": "2026-01-03T00:00:00Z",
+  "releaseTime": "2026-01-03T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "libraries": [
+    {
+      "name": "net.fabricmc:fabric-loader:0.16.9"
+    }
+  ]
+}

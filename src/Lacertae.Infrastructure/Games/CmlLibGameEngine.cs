@@ -11,16 +11,14 @@ using Lacertae.Domain.Versions;
 
 namespace Lacertae.Infrastructure.Games;
 
-public sealed class CmlLibGameEngine(string gameRoot) : IGameEngine
+public sealed class CmlLibGameEngine : IGameEngine
 {
-    private readonly string gameRoot = Path.GetFullPath(
-        string.IsNullOrWhiteSpace(gameRoot)
-            ? throw new ArgumentException("Game root cannot be blank.", nameof(gameRoot))
-            : gameRoot);
-
     public async Task<Result<IReadOnlyList<GameVersionDescriptor>>> InspectLocalVersionsAsync(
+        string gameRootPath,
         CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameRootPath);
+        string gameRoot = Path.GetFullPath(gameRootPath);
         try
         {
             MinecraftPath path = new(gameRoot);
@@ -50,7 +48,8 @@ public sealed class CmlLibGameEngine(string gameRoot) : IGameEngine
                     metadata.Name,
                     version.Type ?? "unknown",
                     version.InheritsFrom,
-                    new JavaRequirement(javaVersion.JavaVersion.Component, majorVersion)));
+                    new JavaRequirement(javaVersion.JavaVersion.Component, majorVersion),
+                    HasKnownLoader(version)));
             }
 
             return Result<IReadOnlyList<GameVersionDescriptor>>.Success(versions);
@@ -66,5 +65,47 @@ public sealed class CmlLibGameEngine(string gameRoot) : IGameEngine
                 ["action.version.inspect_again"],
                 new Dictionary<string, string> { ["gameRoot"] = Path.GetFileName(gameRoot) }));
         }
+    }
+
+    private static bool HasKnownLoader(IVersion version)
+    {
+        HashSet<string> visited = new(StringComparer.Ordinal);
+        for (IVersion? current = version; current is not null; current = current.ParentVersion)
+        {
+            if (!visited.Add(current.Id))
+            {
+                break;
+            }
+
+            if (current.Libraries is not null && current.Libraries.Any(static library => IsKnownLoaderCoordinate(library.Name)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsKnownLoaderCoordinate(string? coordinate)
+    {
+        if (string.IsNullOrWhiteSpace(coordinate))
+        {
+            return false;
+        }
+
+        string[] parts = coordinate.Split(':', StringSplitOptions.TrimEntries);
+        if (parts.Length < 2)
+        {
+            return false;
+        }
+
+        return (string.Equals(parts[0], "net.fabricmc", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[1], "fabric-loader", StringComparison.OrdinalIgnoreCase)) ||
+               (string.Equals(parts[0], "net.minecraftforge", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[1], "forge", StringComparison.OrdinalIgnoreCase)) ||
+               (string.Equals(parts[0], "net.neoforged", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[1], "neoforge", StringComparison.OrdinalIgnoreCase)) ||
+               (string.Equals(parts[0], "org.quiltmc", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(parts[1], "quilt-loader", StringComparison.OrdinalIgnoreCase));
     }
 }

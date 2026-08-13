@@ -1,0 +1,13 @@
+{
+  "id": "fixture-unknown-loader",
+  "inheritsFrom": "fixture-base",
+  "type": "release",
+  "time": "2026-01-07T00:00:00Z",
+  "releaseTime": "2026-01-07T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "libraries": [
+    {
+      "name": "com.example:custom-loader:1.0.0"
+    }
+  ]
+}

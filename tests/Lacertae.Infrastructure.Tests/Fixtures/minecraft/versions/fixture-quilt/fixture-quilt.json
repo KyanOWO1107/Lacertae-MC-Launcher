@@ -1,0 +1,13 @@
+{
+  "id": "fixture-quilt",
+  "inheritsFrom": "fixture-base",
+  "type": "release",
+  "time": "2026-01-06T00:00:00Z",
+  "releaseTime": "2026-01-06T00:00:00Z",
+  "mainClass": "net.minecraft.client.main.Main",
+  "libraries": [
+    {
+      "name": "org.quiltmc:quilt-loader:0.26.3"
+    }
+  ]
+}
