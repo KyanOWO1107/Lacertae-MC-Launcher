@@ -16,5 +16,6 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="NetArchTest.Rules" />
+    <Using Include="Xunit" />
   </ItemGroup>
 </Project>
