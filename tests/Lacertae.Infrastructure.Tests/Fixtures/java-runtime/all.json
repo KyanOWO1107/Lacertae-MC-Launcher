@@ -1,0 +1,26 @@
+{
+  "windows-x64": {
+    "java-runtime-beta": [
+      {
+        "availability": { "group": 5851, "progress": 100 },
+        "manifest": {
+          "sha1": "89ce85ccb518c62e18b4b58d63399ba2d9611426",
+          "size": 148571,
+          "url": "https://piston-meta.mojang.com/v1/packages/89ce85ccb518c62e18b4b58d63399ba2d9611426/manifest.json"
+        }
+      }
+    ],
+    "java-runtime-delta": [
+      {
+        "availability": { "group": 5851, "progress": 100 },
+        "manifest": {
+          "sha1": "cb4394a27089d19f65d5baa6cf0482c27c3c7865",
+          "size": 148529,
+          "url": "https://piston-meta.mojang.com/v1/packages/cb4394a27089d19f65d5baa6cf0482c27c3c7865/manifest.json"
+        }
+      }
+    ]
+  },
+  "windows-arm64": {},
+  "windows-x86": {}
+}
