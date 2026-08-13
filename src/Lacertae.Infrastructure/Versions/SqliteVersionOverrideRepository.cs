@@ -119,6 +119,46 @@ public sealed class SqliteVersionOverrideRepository(SqliteConnectionFactory fact
         }
     }
 
+    public async Task<Result<Unit>> RenameAsync(
+        string gameRootId,
+        string sourceFolder,
+        string targetFolder,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(gameRootId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceFolder);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetFolder);
+        await using SqliteConnection connection = factory.Create();
+        await connection.OpenAsync(cancellationToken);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE version_overrides
+            SET version_folder = $targetFolder
+            WHERE game_root_id = $gameRootId AND version_folder = $sourceFolder;
+            """;
+        command.Parameters.AddWithValue("$gameRootId", gameRootId);
+        command.Parameters.AddWithValue("$sourceFolder", sourceFolder);
+        command.Parameters.AddWithValue("$targetFolder", targetFolder);
+        try
+        {
+            await command.ExecuteNonQueryAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return Result.Success();
+        }
+        catch (SqliteException)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            return Result.Failure(RenameProblem());
+        }
+        catch
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
     private static VersionOverride Read(SqliteDataReader reader)
     {
         int isolation = reader.GetInt32(3);
@@ -167,4 +207,12 @@ public sealed class SqliteVersionOverrideRepository(SqliteConnectionFactory fact
         false,
         Guid.NewGuid().ToString("N"),
         ["action.version.review_settings"]);
+
+    private static Problem RenameProblem() => new(
+        "VERSION_OVERRIDE_RENAME_FAILED",
+        ProblemStage.Storage,
+        "problem.version.override_rename_failed",
+        false,
+        Guid.NewGuid().ToString("N"),
+        ["action.version.review_rename"]);
 }

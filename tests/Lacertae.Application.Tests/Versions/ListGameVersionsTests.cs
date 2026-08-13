@@ -134,5 +134,12 @@ public sealed class ListGameVersionsTests
             string versionFolder,
             CancellationToken cancellationToken) =>
             Task.FromResult(Result.Success());
+
+        public Task<Result<Unit>> RenameAsync(
+            string gameRootId,
+            string sourceFolder,
+            string targetFolder,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Result.Success());
     }
 }

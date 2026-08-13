@@ -18,4 +18,10 @@ public interface IVersionOverrideRepository
         string gameRootId,
         string versionFolder,
         CancellationToken cancellationToken);
+
+    Task<Result<Unit>> RenameAsync(
+        string gameRootId,
+        string sourceFolder,
+        string targetFolder,
+        CancellationToken cancellationToken);
 }
