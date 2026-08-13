@@ -12,5 +12,6 @@
     <PackageReference Include="coverlet.collector" PrivateAssets="all" />
     <PackageReference Include="Avalonia.Headless.XUnit" />
     <PackageReference Include="Avalonia.Skia" />
+    <Using Include="Xunit" />
   </ItemGroup>
 </Project>
