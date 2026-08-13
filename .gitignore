@@ -1,0 +1,60 @@
+# Local planning and private design material
+.superpowers/
+@misc/
+
+# IDE and editor state
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET build and test output
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Local application data and diagnostics
+LacertaeData/
+lacertae.portable
+logs/
+cache/
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.dmp
+
+# Developer-only configuration and credentials
+.env
+.env.*
+!.env.example
+*.Local.json
+*.local.json
+secrets.json
+oauth.local.json
+signing/
+*.pfx
+*.p12
+*.key
+*.pem
+
+# Packaging and generated release artifacts
+publish/
+releases/
+packages/
+*.nupkg
+*.snupkg
+*.zip
+*.7z
+
+# Operating system metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
