@@ -1,0 +1,33 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Lacertae.Desktop.ViewModels"
+        x:Class="Lacertae.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Lacertae"
+        Width="960"
+        Height="600"
+        MinWidth="760"
+        MinHeight="480">
+  <Grid ColumnDefinitions="220,*" RowDefinitions="*">
+    <Border Grid.Column="0" Background="#18212B" Padding="20">
+      <StackPanel Spacing="12">
+        <TextBlock FontSize="24" FontWeight="SemiBold" Foreground="White" Text="Lacertae" />
+        <TextBlock Margin="0,0,0,16" Foreground="#AFC0D1" Text="Minecraft Launcher" />
+        <Button HorizontalContentAlignment="Left" Content="主页" />
+        <Button HorizontalContentAlignment="Left" Content="版本" />
+        <Button HorizontalContentAlignment="Left" Content="下载" />
+        <Button HorizontalContentAlignment="Left" Content="设置" />
+      </StackPanel>
+    </Border>
+    <Grid Grid.Column="1" Margin="32" RowDefinitions="Auto,Auto,*">
+      <TextBlock FontSize="30" FontWeight="SemiBold" Text="{Binding Greeting}" />
+      <Border Grid.Row="1" Margin="0,24,0,0" Padding="24" CornerRadius="12" Background="#F2F5F8">
+        <StackPanel Spacing="12">
+          <TextBlock FontSize="16" Text="当前游戏" />
+          <TextBlock Name="VersionSummary" FontSize="22" Text="{Binding VersionSummary}" />
+          <Button Name="LaunchButton" Width="160" HorizontalAlignment="Left" Content="启动游戏" IsEnabled="{Binding CanLaunch}" />
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Grid>
+</Window>
