@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lacertae.invalid/schemas/settings/v1.schema.json",
+  "title": "Lacertae launcher settings v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "theme",
+    "selectedGameRootId",
+    "selectedVersionFolder",
+    "defaultAccountId",
+    "globalJavaPath",
+    "isolationPolicy",
+    "checkUpdatesOnStartup"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "theme": {
+      "enum": [
+        "system",
+        "light",
+        "dark"
+      ]
+    },
+    "selectedGameRootId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selectedVersionFolder": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "defaultAccountId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "globalJavaPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "isolationPolicy": {
+      "enum": [
+        "disabled",
+        "modLoaderOnly",
+        "nonReleaseOnly",
+        "modLoaderOrNonRelease",
+        "all"
+      ]
+    },
+    "checkUpdatesOnStartup": {
+      "type": "boolean"
+    }
+  }
+}
