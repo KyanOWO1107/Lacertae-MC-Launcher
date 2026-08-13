@@ -1,6 +1,16 @@
 {
   "version": 2,
   "dependencies": {
-    "net10.0": {}
+    "net10.0": {
+      "lacertae.application": {
+        "type": "Project",
+        "dependencies": {
+          "Lacertae.Domain": "[1.0.0, )"
+        }
+      },
+      "lacertae.domain": {
+        "type": "Project"
+      }
+    }
   }
 }

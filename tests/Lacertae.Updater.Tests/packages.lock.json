@@ -163,11 +163,20 @@
           "xunit.v3.runner.common": "[3.2.2]"
         }
       },
+      "lacertae.application": {
+        "type": "Project",
+        "dependencies": {
+          "Lacertae.Domain": "[1.0.0, )"
+        }
+      },
       "lacertae.domain": {
         "type": "Project"
       },
       "lacertae.testing": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Lacertae.Application": "[1.0.0, )"
+        }
       },
       "lacertae.updater": {
         "type": "Project",

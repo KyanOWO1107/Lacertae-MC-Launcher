@@ -689,7 +689,10 @@
         }
       },
       "lacertae.testing": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Lacertae.Application": "[1.0.0, )"
+        }
       },
       "Avalonia": {
         "type": "CentralTransitive",
