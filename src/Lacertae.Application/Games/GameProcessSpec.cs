@@ -8,7 +8,8 @@ public sealed class GameProcessSpec
         string fileName,
         IReadOnlyList<SensitiveString> argumentList,
         string workingDirectory,
-        IReadOnlyDictionary<string, SensitiveString> environment)
+        IReadOnlyDictionary<string, SensitiveString> environment,
+        string? correlationId = null)
     {
         FileName = string.IsNullOrWhiteSpace(fileName)
             ? throw new ArgumentException("Executable path cannot be blank.", nameof(fileName))
@@ -31,6 +32,10 @@ public sealed class GameProcessSpec
         {
             throw new ArgumentException("Environment entries are invalid.", nameof(environment));
         }
+
+        CorrelationId = string.IsNullOrWhiteSpace(correlationId)
+            ? Guid.NewGuid().ToString("N")
+            : correlationId;
     }
 
     public string FileName { get; }
@@ -40,6 +45,8 @@ public sealed class GameProcessSpec
     public string WorkingDirectory { get; }
 
     public IReadOnlyDictionary<string, SensitiveString> Environment { get; }
+
+    public string CorrelationId { get; }
 
     public override string ToString() =>
         $"GameProcessSpec({Path.GetFileName(FileName)}, [REDACTED ARGUMENTS])";
