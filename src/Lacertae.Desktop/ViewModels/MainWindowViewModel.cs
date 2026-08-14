@@ -1,3 +1,5 @@
+using Lacertae.Desktop.ViewModels.Java;
+
 namespace Lacertae.Desktop.ViewModels;
 
 public sealed class MainWindowViewModel
@@ -13,4 +15,6 @@ public sealed class MainWindowViewModel
     public string VersionSummary => versionSummary;
 
     public bool CanLaunch => canLaunch;
+
+    public JavaSettingsViewModel JavaSettings { get; } = new();
 }

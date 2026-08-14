@@ -28,7 +28,7 @@ public static class JavaSelector
             .ToArray();
         if (exactMajor.Length == 0)
         {
-            return Result<JavaSelection>.Failure(Problem("JAVA_MISSING", request, "action.java.install_managed"));
+            return Result<JavaSelection>.Failure(Problem("JAVA_MISSING", request, "action.java.install-managed"));
         }
 
         JavaInstallation[] compatible = exactMajor

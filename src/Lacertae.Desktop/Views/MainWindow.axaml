@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Lacertae.Desktop.ViewModels"
+        xmlns:views="using:Lacertae.Desktop.Views.Java"
         x:Class="Lacertae.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Lacertae"
@@ -27,6 +28,9 @@
           <TextBlock Name="VersionSummary" FontSize="22" Text="{Binding VersionSummary}" />
           <Button Name="LaunchButton" Width="160" HorizontalAlignment="Left" Content="启动游戏" IsEnabled="{Binding CanLaunch}" />
         </StackPanel>
+      </Border>
+      <Border Grid.Row="2" Margin="0,24,0,0" Padding="18" CornerRadius="12" Background="#F2F5F8">
+        <views:JavaSettingsView DataContext="{Binding JavaSettings}" />
       </Border>
     </Grid>
   </Grid>

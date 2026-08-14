@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Java"
+             x:Class="Lacertae.Desktop.Views.Java.JavaSettingsView"
+             x:DataType="vm:JavaSettingsViewModel">
+  <StackPanel Spacing="10">
+    <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+      <TextBlock FontSize="18" FontWeight="SemiBold" Text="Java 与内存" />
+      <Button Grid.Column="1" Content="{Binding AutomaticOptionLabel}" />
+      <Button Grid.Column="2" Content="{Binding AddPathLabel}" IsEnabled="{Binding CanAddPath}" />
+    </Grid>
+    <TextBlock IsVisible="{Binding ShowInstallManagedAction}"
+               Foreground="#A6511B"
+               Text="{Binding MissingRuntimeMessage}" />
+    <Button HorizontalAlignment="Left"
+            Content="{Binding InstallManagedLabel}"
+            IsVisible="{Binding ShowInstallManagedAction}" />
+    <ListBox MaxHeight="190"
+             ItemsSource="{Binding Runtimes}"
+             SelectedItem="{Binding SelectedRuntime}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:JavaRuntimeItem">
+          <Expander Header="{Binding PrimaryLabel}">
+            <StackPanel Margin="8" Spacing="6">
+              <TextBlock Foreground="#5D6B78" Text="{Binding SecondaryLabel}" />
+              <TextBlock Foreground="#5D6B78" Text="{Binding PathLabel}" />
+              <TextBlock Text="{Binding ExecutablePath}" TextWrapping="Wrap" />
+              <Button HorizontalAlignment="Left"
+                      Content="{Binding CopyPathLabel}"
+                      Click="CopyPath" />
+            </StackPanel>
+          </Expander>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <TextBlock IsVisible="{Binding IsAutomaticSelected}"
+               Foreground="#5D6B78"
+               Text="当前使用自动选择，启动时会按版本要求和架构选择兼容 Java。" />
+  </StackPanel>
+</UserControl>
