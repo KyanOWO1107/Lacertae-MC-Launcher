@@ -1,0 +1,12 @@
+{
+  "objects": {
+    "icons/icon_16x16.png": {
+      "hash": "5ff04807c356f1beed0b86ccf659b44b9983e3fa",
+      "size": 781
+    },
+    "minecraft/sounds.json": {
+      "hash": "25fe1e45f2f3f67a59ccf53652f8e4182056f6cb",
+      "size": 548751
+    }
+  }
+}
