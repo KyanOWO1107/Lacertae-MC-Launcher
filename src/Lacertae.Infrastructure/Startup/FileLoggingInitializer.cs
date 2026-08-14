@@ -50,5 +50,9 @@ public sealed class FileLoggingInitializer : IStartupLoggingInitializer
         "problem.startup.logging_failed",
         false,
         Guid.NewGuid().ToString("N"),
-        ["action.startup.review_logs"]);
+        ["action.startup.review_logs"],
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["safePath"] = "logs/lacertae-*.log",
+        });
 }

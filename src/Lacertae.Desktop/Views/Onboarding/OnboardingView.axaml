@@ -1,0 +1,101 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Onboarding"
+             x:Class="Lacertae.Desktop.Views.Onboarding.OnboardingView"
+             x:DataType="vm:OnboardingViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="28" Spacing="16">
+      <TextBlock Name="OnboardingHeading"
+                 Focusable="True"
+                 FontSize="26"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextPrimaryBrush}"
+                 Text="首次使用设置" />
+      <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="完成可恢复的四步设置后，启动预检才会启用启动操作。"
+                 TextWrapping="Wrap" />
+      <ItemsControl ItemsSource="{Binding Steps}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel Orientation="Horizontal" ItemSpacing="8" LineSpacing="8" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:OnboardingStepViewModel">
+            <Border Padding="10,6"
+                    CornerRadius="{DynamicResource CornerRadius8}"
+                    Background="{DynamicResource SurfaceSubtleBrush}">
+              <TextBlock Text="{Binding Label}" />
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource StatusInfoSurfaceBrush}">
+        <StackPanel Spacing="6">
+          <TextBlock FontWeight="SemiBold" Text="数据位置摘要" />
+          <TextBlock Text="{Binding DataRootModeLabel}" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding DataRootSummary}"
+                     TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                     Text="便携模式由 lacertae.portable 标记决定，修改后需要重启。"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}">
+        <StackPanel Spacing="10">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="游戏根目录" />
+          <TextBox PlaceholderText="例如 C:\\Games\\.minecraft" Text="{Binding GameRootPathDraft}" />
+          <Button HorizontalAlignment="Left"
+                  Content="添加空目录或已有目录"
+                  Command="{Binding AddGameRootCommand}" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}">
+        <StackPanel Spacing="10">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="账号" />
+          <TextBox PlaceholderText="离线玩家名" Text="{Binding OfflinePlayerNameDraft}" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="可以直接创建离线账号，不需要 Microsoft 配置。"
+                     TextWrapping="Wrap" />
+          <Button HorizontalAlignment="Left"
+                  Content="添加离线账号"
+                  Command="{Binding AddOfflineAccountCommand}" />
+        </StackPanel>
+      </Border>
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}">
+        <StackPanel Spacing="10">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="Java 与版本" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="选择已安装的版本后，再选择满足版本要求的 Java。"
+                     TextWrapping="Wrap" />
+          <TextBox PlaceholderText="已安装版本 ID，例如 1.21.1"
+                   Text="{Binding VersionIdDraft}" />
+          <Button HorizontalAlignment="Left"
+                  Content="验证并选择版本"
+                  Command="{Binding SelectVersionCommand}" />
+          <TextBox PlaceholderText="Java 可执行文件路径"
+                   Text="{Binding JavaPathDraft}" />
+          <Button HorizontalAlignment="Left"
+                  Content="验证并选择 Java"
+                  Command="{Binding SelectJavaCommand}" />
+          <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                     Text="此处的版本和 Java 选择由应用层用例验证。"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="稍后设置" Command="{Binding DeferSetupCommand}" />
+        <Button Content="关闭" Command="{Binding CloseCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

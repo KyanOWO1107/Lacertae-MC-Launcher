@@ -1,0 +1,35 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Startup"
+             x:Class="Lacertae.Desktop.Views.Startup.StartupView"
+             x:DataType="vm:StartupViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="28" Spacing="14">
+      <TextBlock FontSize="26"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource TextPrimaryBrush}"
+                 Text="启动恢复" />
+      <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="启动器尚未打开主窗口；可以安全地重试或查看诊断信息。"
+                 TextWrapping="Wrap" />
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource StatusErrorSurfaceBrush}">
+        <StackPanel Spacing="8">
+          <TextBlock FontWeight="SemiBold" Text="{Binding ProblemCode}" />
+          <TextBlock Text="{Binding LocalizedSummary}" TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding SafePathLabel}"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+      <ProgressBar Maximum="1" Value="{Binding Progress.Fraction}" />
+      <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding Progress.StageKey}" />
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="重试" Command="{Binding RetryCommand}" IsEnabled="{Binding CanRetry}" />
+        <Button Content="恢复备份" Command="{Binding RestoreCommand}" IsEnabled="{Binding CanRestore}" />
+        <Button Content="打开日志" Command="{Binding OpenLogCommand}" IsEnabled="{Binding CanOpenLog}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

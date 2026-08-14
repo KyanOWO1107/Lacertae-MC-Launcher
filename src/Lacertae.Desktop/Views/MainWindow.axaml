@@ -2,36 +2,117 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Lacertae.Desktop.ViewModels"
         xmlns:views="using:Lacertae.Desktop.Views.Java"
+        xmlns:onboarding="using:Lacertae.Desktop.Views.Onboarding"
         x:Class="Lacertae.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Lacertae"
         Width="960"
         Height="600"
         MinWidth="760"
-        MinHeight="480">
-  <Grid ColumnDefinitions="220,*" RowDefinitions="*">
-    <Border Grid.Column="0" Background="{DynamicResource SurfaceElevatedBrush}" Padding="20">
+        MinHeight="480"
+        SizeChanged="OnSizeChanged">
+  <Grid Background="{DynamicResource SurfaceBaseBrush}">
+    <ContentControl IsVisible="{Binding IsOnboardingVisible}">
+      <onboarding:OnboardingView DataContext="{Binding Onboarding}" />
+    </ContentControl>
+    <Border x:Name="WideNavigation"
+            Width="220"
+            HorizontalAlignment="Left"
+            Background="{DynamicResource SurfaceElevatedBrush}"
+            Padding="20"
+            IsVisible="{Binding IsShellWideNavigation}">
       <StackPanel Spacing="12">
-        <TextBlock FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource TextPrimaryBrush}" Text="Lacertae" />
-        <TextBlock Margin="0,0,0,16" Foreground="{DynamicResource TextSecondaryBrush}" Text="Minecraft Launcher" />
-        <Button HorizontalContentAlignment="Left" Content="主页" />
-        <Button HorizontalContentAlignment="Left" Content="版本" />
-        <Button HorizontalContentAlignment="Left" Content="下载" />
-        <Button HorizontalContentAlignment="Left" Content="设置" />
+        <TextBlock FontSize="24"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
+                   Text="Lacertae" />
+        <TextBlock Margin="0,0,0,16"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="Minecraft Launcher" />
+        <Button HorizontalContentAlignment="Left" Content="主页" Tag="home" Click="NavigateFromButton" />
+        <Button HorizontalContentAlignment="Left" Content="版本" Tag="versions" Click="NavigateFromButton" />
+        <Button HorizontalContentAlignment="Left" Content="下载" Tag="downloads" Click="NavigateFromButton" />
+        <Button HorizontalContentAlignment="Left" Content="资源" Tag="resources" Click="NavigateFromButton" />
+        <Button HorizontalContentAlignment="Left" Content="任务" Tag="tasks" Click="NavigateFromButton" />
+        <Button Name="SettingsNavigationButton"
+                HorizontalContentAlignment="Left"
+                Content="设置"
+                Tag="settings"
+                Click="NavigateFromButton" />
+        <ItemsControl Name="WideNavigationItems" IsVisible="False" ItemsSource="{Binding NavigationItems}" />
       </StackPanel>
     </Border>
-    <Grid Grid.Column="1" Margin="32" RowDefinitions="Auto,Auto,*">
-      <TextBlock FontSize="30" FontWeight="SemiBold" Text="{Binding Greeting}" />
-      <Border Grid.Row="1" Margin="0,24,0,0" Padding="24" CornerRadius="{DynamicResource CornerRadius12}" Background="{DynamicResource SurfaceSubtleBrush}">
-        <StackPanel Spacing="12">
-          <TextBlock FontSize="16" Text="当前游戏" />
-          <TextBlock Name="VersionSummary" FontSize="22" Text="{Binding VersionSummary}" />
-          <Button Name="LaunchButton" Width="160" HorizontalAlignment="Left" Content="启动游戏" IsEnabled="{Binding CanLaunch}" />
-        </StackPanel>
-      </Border>
-      <Border Grid.Row="2" Margin="0,24,0,0" Padding="18" CornerRadius="{DynamicResource CornerRadius12}" Background="{DynamicResource SurfaceSubtleBrush}">
-        <views:JavaSettingsView DataContext="{Binding JavaSettings}" />
-      </Border>
-    </Grid>
+
+    <Border x:Name="CompactNavigation"
+            Height="78"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            Background="{DynamicResource SurfaceElevatedBrush}"
+            Padding="12"
+            IsVisible="{Binding IsShellCompactNavigation}">
+      <ItemsControl Name="CompactNavigationItems" ItemsSource="{Binding NavigationItems}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:NavigationItemViewModel">
+            <Button Content="{Binding Label}"
+                    ToolTip.Tip="{Binding Description}"
+                    Tag="{Binding RouteId}"
+                    Click="NavigateFromButton" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </Border>
+
+    <ScrollViewer x:Name="ContentPanel"
+                  Margin="220,0,0,0"
+                  Padding="32"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto"
+                  IsVisible="{Binding IsShellVisible}">
+      <StackPanel Spacing="16">
+        <TextBlock Name="PageHeading"
+                   Focusable="True"
+                   FontSize="30"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource TextPrimaryBrush}"
+                   Text="{Binding CurrentPageHeading}" />
+        <TextBlock MaxWidth="720"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="{Binding CurrentPage.Summary}"
+                   TextWrapping="Wrap" />
+        <Border Padding="18"
+                CornerRadius="{DynamicResource CornerRadius12}"
+                Background="{DynamicResource SurfaceSubtleBrush}">
+          <StackPanel Spacing="12">
+            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="{Binding CurrentPage.Body}"
+                       TextWrapping="Wrap" />
+            <TextBlock FontSize="16" Text="当前游戏" />
+             <TextBlock Name="VersionSummary"
+                        FontSize="22"
+                        Text="{Binding VersionSummary}" />
+            <Button Name="OpenOnboardingButton"
+                    HorizontalAlignment="Left"
+                    Content="重新打开首次使用设置"
+                    Command="{Binding OpenOnboardingCommand}"
+                    IsVisible="{Binding IsSettingsPage}" />
+             <Button Name="LaunchButton"
+                    Width="160"
+                    HorizontalAlignment="Left"
+                    Content="启动游戏"
+                    IsEnabled="{Binding CanLaunch}" />
+          </StackPanel>
+        </Border>
+        <Border Padding="18"
+                CornerRadius="{DynamicResource CornerRadius12}"
+                Background="{DynamicResource SurfaceSubtleBrush}">
+          <views:JavaSettingsView DataContext="{Binding JavaSettings}" />
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
   </Grid>
 </Window>

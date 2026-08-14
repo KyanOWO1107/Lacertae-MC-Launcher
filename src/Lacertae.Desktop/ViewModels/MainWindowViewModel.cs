@@ -1,20 +1,333 @@
+using System.ComponentModel;
+using System.Windows.Input;
+using Lacertae.Application.Startup;
 using Lacertae.Desktop.ViewModels.Java;
+using Lacertae.Desktop.ViewModels.Onboarding;
+using Lacertae.Domain.Storage;
 
 namespace Lacertae.Desktop.ViewModels;
 
-public sealed class MainWindowViewModel
+public sealed record LauncherPageViewModel(
+    string RouteId,
+    string Heading,
+    string Summary,
+    string Body,
+    bool IsActionPage = false);
+
+public sealed class MainWindowViewModel : INotifyPropertyChanged
 {
+    private readonly Dictionary<string, Func<LauncherPageViewModel>> pageFactories =
+        new Dictionary<string, Func<LauncherPageViewModel>>(StringComparer.Ordinal)
+        {
+            [LauncherRouteIds.Home] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Home,
+                "主页",
+                "准备好后即可启动游戏。",
+                "选择游戏根目录、账号、版本和兼容 Java 后，启动按钮会在启动预检通过时启用。"),
+            [LauncherRouteIds.Versions] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Versions,
+                "版本",
+                "查看当前游戏根目录中的本地版本。",
+                "M1 只管理原版版本及其安装状态；版本文件不会在浏览时被改写。"),
+            [LauncherRouteIds.Downloads] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Downloads,
+                "下载",
+                "安装或修复原版 Minecraft 文件。",
+                "下载页只包含原版安装和修复操作，其他来源或整合包将在后续版本提供。",
+                IsActionPage: true),
+            [LauncherRouteIds.Resources] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Resources,
+                "资源",
+                "管理当前版本的本地资源文件夹。",
+                "这里打开所选版本范围内的 Mods、资源包、光影和存档文件夹；在线搜索与安装会在后续版本提供。"),
+            [LauncherRouteIds.Tasks] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Tasks,
+                "任务",
+                "查看安装、修复和其他后台任务。",
+                "长任务会保留进度和可恢复状态，关闭窗口不会把未完成的任务伪装成成功。"),
+            [LauncherRouteIds.Settings] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Settings,
+                "设置",
+                "调整主题、数据位置说明和启动偏好。",
+                "便携模式由程序目录中的 lacertae.portable 标记决定；修改标记后需要重启启动器。"),
+        };
+
     private readonly string greeting = "欢迎使用 Lacertae";
     private readonly string versionSummary = "未选择游戏版本";
-    private readonly bool canLaunch;
+    private bool isCompactNavigation;
+    private string currentRouteId = LauncherRouteIds.Home;
+    private LauncherPageViewModel currentPage;
+    private bool hasStartupState;
+    private bool isOnboardingVisible;
+    private readonly DelegateCommand openOnboardingCommand;
 
-    public MainWindowViewModel() => canLaunch = false;
+    public MainWindowViewModel()
+    {
+        NavigationItems =
+        [
+            new NavigationItemViewModel(LauncherRouteIds.Home, "主页", "启动概览"),
+            new NavigationItemViewModel(LauncherRouteIds.Versions, "版本", "本地版本"),
+            new NavigationItemViewModel(LauncherRouteIds.Downloads, "下载", "原版安装与修复"),
+            new NavigationItemViewModel(LauncherRouteIds.Resources, "资源", "当前版本本地文件夹"),
+            new NavigationItemViewModel(LauncherRouteIds.Tasks, "任务", "后台任务"),
+            new NavigationItemViewModel(LauncherRouteIds.Settings, "设置", "启动器设置"),
+        ];
+        currentPage = CreatePage(LauncherRouteIds.Home);
+        SelectRoute(currentRouteId);
+        Onboarding = new OnboardingViewModel();
+        Onboarding.PropertyChanged += OnboardingPropertyChanged;
+        openOnboardingCommand = new DelegateCommand(OpenOnboarding, () => CanOpenOnboarding);
+        OpenOnboardingCommand = openOnboardingCommand;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public IReadOnlyList<NavigationItemViewModel> NavigationItems { get; }
 
     public string Greeting => greeting;
 
     public string VersionSummary => versionSummary;
 
-    public bool CanLaunch => canLaunch;
+    public bool CanLaunch => hasStartupState && Onboarding.CanLaunch;
+
+    public bool IsLaunchDisabled => !CanLaunch;
 
     public JavaSettingsViewModel JavaSettings { get; } = new();
+
+    public OnboardingViewModel Onboarding { get; private set; }
+
+    public bool HasStartupState => hasStartupState;
+
+    public bool CanOpenOnboarding => hasStartupState;
+
+    public bool IsSettingsPage => string.Equals(
+        CurrentRouteId,
+        LauncherRouteIds.Settings,
+        StringComparison.Ordinal);
+
+    public ICommand OpenOnboardingCommand { get; }
+
+    public bool IsOnboardingVisible
+    {
+        get => isOnboardingVisible;
+        private set
+        {
+            if (isOnboardingVisible == value)
+            {
+                return;
+            }
+
+            isOnboardingVisible = value;
+            OnPropertyChanged(nameof(IsOnboardingVisible));
+            OnPropertyChanged(nameof(IsShellVisible));
+            OnPropertyChanged(nameof(IsShellWideNavigation));
+            OnPropertyChanged(nameof(IsShellCompactNavigation));
+        }
+    }
+
+    public bool IsShellVisible => !IsOnboardingVisible;
+
+    public bool IsShellWideNavigation => IsShellVisible && IsWideNavigation;
+
+    public bool IsShellCompactNavigation => IsShellVisible && IsCompactNavigation;
+
+    public string CurrentRouteId => currentRouteId;
+
+    public LauncherPageViewModel CurrentPage => currentPage;
+
+    public string CurrentPageHeading => currentPage.Heading;
+
+    public bool IsCompactNavigation
+    {
+        get => isCompactNavigation;
+        private set
+        {
+            if (isCompactNavigation == value)
+            {
+                return;
+            }
+
+            isCompactNavigation = value;
+            OnPropertyChanged(nameof(IsCompactNavigation));
+            OnPropertyChanged(nameof(IsWideNavigation));
+            OnPropertyChanged(nameof(IsShellWideNavigation));
+            OnPropertyChanged(nameof(IsShellCompactNavigation));
+        }
+    }
+
+    public bool IsWideNavigation => !IsCompactNavigation;
+
+    public void SetViewportWidth(double logicalWidth) => IsCompactNavigation = logicalWidth < 900;
+
+    public void ApplyStartupState(
+        StartupState startupState,
+        IOnboardingUseCases? onboardingUseCases = null,
+        OnboardingDurableState? preflightState = null)
+    {
+        ArgumentNullException.ThrowIfNull(startupState);
+        hasStartupState = true;
+        Onboarding.PropertyChanged -= OnboardingPropertyChanged;
+        Onboarding = new OnboardingViewModel(
+            onboardingUseCases ?? new DisabledOnboardingUseCases(),
+            new OnboardingDataRootSnapshot(
+                startupState.DataRoot.Mode,
+                BuildDataRootSummary(startupState.DataRoot.Mode)),
+            preflightState ?? new OnboardingDurableState(
+                startupState.Settings.SelectedGameRootId,
+                startupState.Settings.DefaultAccountId,
+                startupState.Settings.SelectedVersionFolder,
+                startupState.Settings.GlobalJavaPath,
+                null,
+                false,
+                false,
+                false));
+        Onboarding.PropertyChanged += OnboardingPropertyChanged;
+        IsOnboardingVisible = preflightState?.CanFormLaunchPreflight != true;
+        OnPropertyChanged(nameof(HasStartupState));
+        OnPropertyChanged(nameof(CanOpenOnboarding));
+        openOnboardingCommand.RaiseCanExecuteChanged();
+        OnPropertyChanged(nameof(Onboarding));
+        OnPropertyChanged(nameof(CanLaunch));
+        OnPropertyChanged(nameof(IsLaunchDisabled));
+    }
+
+    public void OpenOnboarding()
+    {
+        if (!CanOpenOnboarding)
+        {
+            return;
+        }
+
+        Onboarding.Reopen();
+        IsOnboardingVisible = true;
+    }
+
+    public bool TryNavigate(string routeId)
+    {
+        ArgumentNullException.ThrowIfNull(routeId);
+        if (!pageFactories.ContainsKey(routeId))
+        {
+            return false;
+        }
+
+        currentRouteId = routeId;
+        currentPage = CreatePage(routeId);
+        SelectRoute(routeId);
+        OnPropertyChanged(nameof(CurrentRouteId));
+        OnPropertyChanged(nameof(CurrentPage));
+        OnPropertyChanged(nameof(CurrentPageHeading));
+        OnPropertyChanged(nameof(IsSettingsPage));
+        return true;
+    }
+
+    public void Navigate(string routeId)
+    {
+        if (!TryNavigate(routeId))
+        {
+            throw new ArgumentException($"Unknown launcher route '{routeId}'.", nameof(routeId));
+        }
+    }
+
+    private LauncherPageViewModel CreatePage(string routeId) => pageFactories[routeId]();
+
+    private void SelectRoute(string routeId)
+    {
+        foreach (NavigationItemViewModel item in NavigationItems)
+        {
+            item.IsSelected = string.Equals(item.RouteId, routeId, StringComparison.Ordinal);
+        }
+    }
+
+    private void OnPropertyChanged(string propertyName) => PropertyChanged?.Invoke(
+        this,
+        new PropertyChangedEventArgs(propertyName));
+
+    private void OnboardingPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(OnboardingViewModel.IsOpen))
+        {
+            IsOnboardingVisible = hasStartupState && Onboarding.IsOpen;
+        }
+
+        if (e.PropertyName is nameof(OnboardingViewModel.CanLaunch) or nameof(OnboardingViewModel.IsComplete))
+        {
+            OnPropertyChanged(nameof(CanLaunch));
+            OnPropertyChanged(nameof(IsLaunchDisabled));
+            if (Onboarding.IsComplete && Onboarding.CanLaunch && !Onboarding.IsDeferredSetup)
+            {
+                IsOnboardingVisible = false;
+            }
+        }
+    }
+
+    private static string BuildDataRootSummary(DataRootMode mode) => mode switch
+    {
+        DataRootMode.LocalToExecutable => "便携数据目录（由 lacertae.portable 标记决定，重启后生效）",
+        DataRootMode.UserProfile => "Windows 用户数据目录",
+        _ => "已选择的数据目录",
+    };
+
+    private sealed class DelegateCommand(Action execute, Func<bool> canExecute) : ICommand
+    {
+        public event EventHandler? CanExecuteChanged;
+
+        public bool CanExecute(object? parameter) => canExecute();
+
+        public void Execute(object? parameter) => execute();
+
+        public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private sealed class DisabledOnboardingUseCases : IOnboardingUseCases
+    {
+        public Task<Lacertae.Domain.Results.Result<Lacertae.Domain.GameRoots.GameRoot>> AddGameRootAsync(
+            string path,
+            bool allowEmpty,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Lacertae.Domain.Results.Result<Lacertae.Domain.GameRoots.GameRoot>.Failure(
+                new Lacertae.Domain.Problems.Problem(
+                    "ONBOARDING_ACTION_UNAVAILABLE",
+                    Lacertae.Domain.Problems.ProblemStage.Configuration,
+                    "problem.onboarding.unavailable",
+                    false,
+                    Guid.NewGuid().ToString("N"),
+                    ["action.onboarding.review"])));
+
+        public Task<Lacertae.Domain.Results.Result<Lacertae.Domain.Accounts.Account>> AddOfflineAccountAsync(
+            string playerName,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Lacertae.Domain.Results.Result<Lacertae.Domain.Accounts.Account>.Failure(
+                new Lacertae.Domain.Problems.Problem(
+                    "ONBOARDING_ACTION_UNAVAILABLE",
+                    Lacertae.Domain.Problems.ProblemStage.Configuration,
+                    "problem.onboarding.unavailable",
+                    false,
+                    Guid.NewGuid().ToString("N"),
+                    ["action.onboarding.review"])));
+
+        public Task<Lacertae.Domain.Results.Result<OnboardingVersionSelection>> SelectVersionAsync(
+            string versionId,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Lacertae.Domain.Results.Result<OnboardingVersionSelection>.Failure(
+                new Lacertae.Domain.Problems.Problem(
+                    "ONBOARDING_ACTION_UNAVAILABLE",
+                    Lacertae.Domain.Problems.ProblemStage.Configuration,
+                    "problem.onboarding.unavailable",
+                    false,
+                    Guid.NewGuid().ToString("N"),
+                    ["action.onboarding.review"])));
+
+        public Task<Lacertae.Domain.Results.Result<OnboardingJavaSelection>> SelectJavaAsync(
+            string executablePath,
+            int requiredMajor,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(Lacertae.Domain.Results.Result<OnboardingJavaSelection>.Failure(
+                new Lacertae.Domain.Problems.Problem(
+                    "ONBOARDING_ACTION_UNAVAILABLE",
+                    Lacertae.Domain.Problems.ProblemStage.Configuration,
+                    "problem.onboarding.unavailable",
+                    false,
+                    Guid.NewGuid().ToString("N"),
+                    ["action.onboarding.review"])));
+    }
 }
