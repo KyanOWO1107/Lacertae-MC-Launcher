@@ -1,0 +1,22 @@
+{
+  "id": "launch-modern",
+  "type": "release",
+  "javaVersion": {
+    "component": "java-runtime-gamma",
+    "majorVersion": "17"
+  },
+  "mainClass": "net.minecraft.client.main.Main",
+  "arguments": {
+    "game": [
+      "--username",
+      "${auth_player_name}",
+      "--version",
+      "${version_name}",
+      "--modern-required"
+    ],
+    "jvm": [
+      "-Dmodern.required=true"
+    ]
+  },
+  "libraries": []
+}

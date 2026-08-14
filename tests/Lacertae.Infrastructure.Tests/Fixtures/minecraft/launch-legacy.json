@@ -1,0 +1,11 @@
+{
+  "id": "launch-legacy",
+  "type": "release",
+  "javaVersion": {
+    "component": "java-runtime-gamma",
+    "majorVersion": "17"
+  },
+  "mainClass": "net.minecraft.client.main.Main",
+  "minecraftArguments": "--username ${auth_player_name} --version ${version_name} --legacy-required",
+  "libraries": []
+}

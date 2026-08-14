@@ -5,6 +5,7 @@ using CmlLib.Core.Version;
 using CmlLib.Core.VersionLoader;
 using CmlLib.Core.VersionMetadata;
 using Lacertae.Application.Games;
+using Lacertae.Domain.Launch;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Versions;
@@ -13,6 +14,18 @@ namespace Lacertae.Infrastructure.Games;
 
 public sealed class CmlLibGameEngine : IGameEngine
 {
+    private readonly CmlLibProcessFactory processFactory;
+
+    public CmlLibGameEngine(CmlLibProcessFactory? processFactory = null)
+    {
+        this.processFactory = processFactory ?? new CmlLibProcessFactory();
+    }
+
+    public Task<Result<GameProcessSpec>> BuildProcessSpecAsync(
+        LaunchPlan plan,
+        CancellationToken cancellationToken) =>
+        processFactory.BuildProcessSpecAsync(plan, cancellationToken);
+
     public async Task<Result<IReadOnlyList<GameVersionDescriptor>>> InspectLocalVersionsAsync(
         string gameRootPath,
         CancellationToken cancellationToken)
