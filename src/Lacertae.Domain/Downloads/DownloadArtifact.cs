@@ -20,20 +20,28 @@ public sealed record DownloadArtifact(
     {
         ArgumentNullException.ThrowIfNull(officialUri);
         ArgumentNullException.ThrowIfNull(hashes);
-        if (!officialUri.IsAbsoluteUri || officialUri.Scheme != Uri.UriSchemeHttps ||
-            expectedSize < 0 || string.IsNullOrWhiteSpace(relativeDestinationPath) || hashes.Count == 0)
+        if (!Enum.IsDefined(kind) || !officialUri.IsAbsoluteUri || officialUri.Scheme != Uri.UriSchemeHttps ||
+            expectedSize <= 0 || string.IsNullOrWhiteSpace(relativeDestinationPath) || hashes.Count == 0)
         {
             throw new ArgumentException("Download artifact metadata is invalid.", nameof(relativeDestinationPath));
         }
 
         string path = relativeDestinationPath.Replace('\\', '/');
-        if (path.StartsWith('/') || path.Split('/').Any(static segment => segment is "" or "." or ".."))
+        if (path.StartsWith('/') || path.Contains(':') || path.Split('/').Any(static segment => segment is "" or "." or ".."))
         {
             throw new ArgumentException("Download artifact path must be relative and normalized.", nameof(relativeDestinationPath));
         }
 
         List<ArtifactHash> normalizedHashes = hashes
-            .Select(static hash => new ArtifactHash(hash.Algorithm, hash.HexDigest))
+            .Select(static hash =>
+            {
+                if (hash is null || hash.Algorithm is null || hash.HexDigest is null)
+                {
+                    throw new ArgumentException("Download artifact hashes are invalid.", nameof(hashes));
+                }
+
+                return new ArtifactHash(hash.Algorithm, hash.HexDigest);
+            })
             .OrderBy(static hash => hash.NormalizedAlgorithm, StringComparer.Ordinal)
             .ToList();
         if (normalizedHashes.Any(static hash =>
