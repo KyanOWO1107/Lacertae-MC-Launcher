@@ -1,4 +1,5 @@
 using Lacertae.Application.Java;
+using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Java;
 using Lacertae.Domain.Launch;
 using Lacertae.Domain.Problems;
@@ -29,16 +30,36 @@ public sealed class LaunchPlanFactory
         try
         {
             return Result<LaunchPlan>.Success(new LaunchPlan(
+                Guid.NewGuid().ToString("N"),
                 version.GameRootId,
                 version.FolderName,
-                accountId,
+                version.FolderName,
+                Path.GetFullPath(gameDirectory),
                 Path.GetFullPath(gameDirectory),
                 javaSettings.Installation.Id,
                 Path.GetFullPath(javaSettings.Installation.ExecutablePath),
                 version.Java.MajorVersion,
-                javaSettings.Memory,
-                javaSettings.JvmArguments,
-                gameArguments));
+                accountId,
+                AccountType.Offline,
+                accountId,
+                "00000000-0000-0000-0000-000000000000",
+                new AuthSession(
+                    accountId,
+                    "00000000-0000-0000-0000-000000000000",
+                    new SensitiveString("offline-session"),
+                    "legacy",
+                    null,
+                    null),
+                javaSettings.Memory.MinimumMb,
+                javaSettings.Memory.MaximumMb,
+                [.. javaSettings.JvmArguments.MemoryArguments, .. javaSettings.JvmArguments.GarbageCollectorArguments],
+                javaSettings.JvmArguments.UserArguments,
+                gameArguments,
+                [],
+                LaunchDisposition.KeepLauncherOpen,
+                DateTimeOffset.UtcNow,
+                version.DisplayName,
+                javaSettings.Installation.Architecture));
         }
         catch (ArgumentException)
         {
