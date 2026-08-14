@@ -248,9 +248,11 @@ public sealed class InstallManagedJavaTests
         public bool CorruptFirstFile { get; init; }
         public CancellationTokenSource? Cancel { get; init; }
 
-        public Task<Result<string>> DownloadAsync(DownloadArtifact artifact, string stagingDirectory, IProgress<OperationProgress> progress, CancellationToken cancellationToken)
+        public Task<Result<DownloadReceipt>> DownloadAsync(DownloadRequest request, IProgress<OperationProgress> progress, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            DownloadArtifact artifact = request.Artifact;
+            string stagingDirectory = request.StagingDirectory;
             string path = Path.Combine(stagingDirectory, artifact.RelativeDestinationPath.Replace('/', Path.DirectorySeparatorChar));
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             FakeArtifact source = package.Files.Single(file => file.Artifact.ArtifactId == artifact.ArtifactId);
@@ -264,7 +266,12 @@ public sealed class InstallManagedJavaTests
             Downloads.Add(path);
             Cancel?.Cancel();
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(Result<string>.Success(path));
+            return Task.FromResult(Result<DownloadReceipt>.Success(new DownloadReceipt(
+                path,
+                new DownloadSourceId("fixture"),
+                content.Length,
+                WasResumed: false,
+                artifact.Hashes.Single())));
         }
 
     }

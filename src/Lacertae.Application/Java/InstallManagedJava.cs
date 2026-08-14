@@ -116,7 +116,7 @@ public sealed class InstallManagedJava(
                 Task<Result<VerifiedArtifact>>[] batch = manifest.Files
                     .Skip(start)
                     .Take(MaximumDownloadConcurrency)
-                    .Select(file => DownloadAndVerifyAsync(file, stagingRoot, semaphore, effectiveProgress, progressState, manifest.Files.Count, manifest.TotalBytes, cancellationToken))
+                    .Select(file => DownloadAndVerifyAsync(file, stagingRoot, operationId, semaphore, effectiveProgress, progressState, manifest.Files.Count, manifest.TotalBytes, cancellationToken))
                     .ToArray();
                 Result<VerifiedArtifact>[] downloaded = await Task.WhenAll(batch);
                 foreach (Result<VerifiedArtifact> result in downloaded)
@@ -193,6 +193,7 @@ public sealed class InstallManagedJava(
     private async Task<Result<VerifiedArtifact>> DownloadAndVerifyAsync(
         ValidatedArtifact file,
         string stagingRoot,
+        string correlationId,
         SemaphoreSlim semaphore,
         IProgress<OperationProgress> progress,
         DownloadProgressState progressState,
@@ -204,9 +205,13 @@ public sealed class InstallManagedJava(
         try
         {
             string expectedPath = CombineRelative(stagingRoot, file.Artifact.RelativeDestinationPath);
-            Result<string> downloaded = await downloader.DownloadAsync(
-                file.Artifact,
-                stagingRoot,
+            Result<DownloadReceipt> downloaded = await downloader.DownloadAsync(
+                new DownloadRequest(
+                    file.Artifact,
+                    stagingRoot,
+                    DownloadSourcePreference.Automatic,
+                    TemporaryFallbackApproved: false,
+                    correlationId),
                 progress,
                 cancellationToken);
             if (!downloaded.IsSuccess)
@@ -217,7 +222,7 @@ public sealed class InstallManagedJava(
             string actualPath;
             try
             {
-                actualPath = Path.GetFullPath(downloaded.Value);
+                actualPath = Path.GetFullPath(downloaded.Value.VerifiedFilePath);
             }
             catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
             {
