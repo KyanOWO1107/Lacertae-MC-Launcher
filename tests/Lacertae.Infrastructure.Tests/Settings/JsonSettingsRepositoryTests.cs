@@ -112,10 +112,78 @@ public sealed class JsonSettingsRepositoryTests
         }
     }
 
+    [Fact]
+    public async Task LoadAsyncRejectsNumericThemeValues()
+    {
+        string directory = CreateDirectory();
+        try
+        {
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, Document(theme: "99"));
+
+            var result = await new JsonSettingsRepository(path).LoadAsync(TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("SETTINGS_CORRUPT", result.Problem?.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsUnknownIsolationPolicyValues()
+    {
+        string directory = CreateDirectory();
+        try
+        {
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, Document(isolationPolicy: "99"));
+
+            var result = await new JsonSettingsRepository(path).LoadAsync(TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("SETTINGS_CORRUPT", result.Problem?.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Fact]
+    public async Task LoadAsyncRejectsUnknownThemeNames()
+    {
+        string directory = CreateDirectory();
+        try
+        {
+            string path = Path.Combine(directory, "settings.json");
+            File.WriteAllText(path, Document(theme: "future"));
+
+            var result = await new JsonSettingsRepository(path).LoadAsync(TestContext.Current.CancellationToken);
+
+            Assert.False(result.IsSuccess);
+            Assert.Equal("SETTINGS_CORRUPT", result.Problem?.Code);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
     private static string CreateDirectory()
     {
         string directory = Path.Combine(Path.GetTempPath(), "lacertae-settings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         return directory;
     }
+
+    private static string Document(string theme = "system", string isolationPolicy = "modLoaderOrNonRelease") =>
+        $"{{\"schemaVersion\":1,\"theme\":{JsonValue(theme)},\"selectedGameRootId\":null,\"selectedVersionFolder\":null,\"defaultAccountId\":null,\"globalJavaPath\":null,\"isolationPolicy\":{JsonValue(isolationPolicy)},\"checkUpdatesOnStartup\":true}}";
+
+    private static string JsonValue(string value) =>
+        int.TryParse(value, out _)
+            ? value
+            : $"\"{value}\"";
 }

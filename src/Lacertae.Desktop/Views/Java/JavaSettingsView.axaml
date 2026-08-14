@@ -10,7 +10,7 @@
       <Button Grid.Column="2" Content="{Binding AddPathLabel}" IsEnabled="{Binding CanAddPath}" />
     </Grid>
     <TextBlock IsVisible="{Binding ShowInstallManagedAction}"
-               Foreground="#A6511B"
+               Foreground="{DynamicResource StatusWarningBrush}"
                Text="{Binding MissingRuntimeMessage}" />
     <Button HorizontalAlignment="Left"
             Content="{Binding InstallManagedLabel}"
@@ -22,8 +22,8 @@
         <DataTemplate x:DataType="vm:JavaRuntimeItem">
           <Expander Header="{Binding PrimaryLabel}">
             <StackPanel Margin="8" Spacing="6">
-              <TextBlock Foreground="#5D6B78" Text="{Binding SecondaryLabel}" />
-              <TextBlock Foreground="#5D6B78" Text="{Binding PathLabel}" />
+              <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding SecondaryLabel}" />
+              <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding PathLabel}" />
               <TextBlock Text="{Binding ExecutablePath}" TextWrapping="Wrap" />
               <Button HorizontalAlignment="Left"
                       Content="{Binding CopyPathLabel}"
@@ -34,7 +34,7 @@
       </ListBox.ItemTemplate>
     </ListBox>
     <TextBlock IsVisible="{Binding IsAutomaticSelected}"
-               Foreground="#5D6B78"
+               Foreground="{DynamicResource TextSecondaryBrush}"
                Text="当前使用自动选择，启动时会按版本要求和架构选择兼容 Java。" />
   </StackPanel>
 </UserControl>

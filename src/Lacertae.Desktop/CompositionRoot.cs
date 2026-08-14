@@ -1,16 +1,20 @@
 using Avalonia;
 using Avalonia.Controls;
+using Lacertae.Application.Accessibility;
 using Lacertae.Application.Operations;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
+using Lacertae.Desktop.Services;
 using Lacertae.Desktop.ViewModels;
 using Lacertae.Desktop.Views;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
+using Lacertae.Domain.Settings;
 using Lacertae.Domain.Storage;
 using Lacertae.Infrastructure.Operations;
 using Lacertae.Infrastructure.Startup;
 using Lacertae.Infrastructure.Storage;
+using Lacertae.Platform.Windows.Accessibility;
 using Lacertae.Platform.Windows.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -24,6 +28,9 @@ public sealed class CompositionRoot : IDisposable
     public CompositionRoot()
     {
         ServiceCollection registrations = new();
+        registrations.AddSingleton<IMotionPreference, WindowsMotionPreference>();
+        registrations.AddSingleton<ThemeService>(provider =>
+            new ThemeService(provider.GetRequiredService<IMotionPreference>()));
         registrations.AddSingleton<IPlatformPaths, WindowsPlatformPaths>();
         registrations.AddSingleton<IFileSystem, SystemFileSystem>();
         registrations.AddSingleton<DataRootResolver>();
@@ -51,11 +58,28 @@ public sealed class CompositionRoot : IDisposable
         Result<StartupState> result = await services.GetRequiredService<StartupCoordinator>().InitializeAsync(cancellationToken);
         if (result.IsSuccess)
         {
+            if (!IsValidSettings(result.Value.Settings))
+            {
+                return Result<StartupState>.Failure(CreateSettingsCorruptProblem());
+            }
+
             startupState = result.Value;
+            ApplyTheme(result.Value.Settings.Theme);
         }
 
         return result;
     }
+
+    public void ApplyTheme(ThemeMode theme, bool reduceMotion = false) =>
+        services.GetRequiredService<ThemeService>().Apply(theme, reduceMotion);
+
+    public static Problem CreateStartupFailureProblem() => new(
+        "STARTUP_FAILED",
+        ProblemStage.Unknown,
+        "problem.startup.failed",
+        false,
+        Guid.NewGuid().ToString("N"),
+        ["action.startup.retry"]);
 
     public MainWindow CreateMainWindow()
     {
@@ -94,4 +118,15 @@ public sealed class CompositionRoot : IDisposable
     {
         services.Dispose();
     }
+
+    private static bool IsValidSettings(LauncherSettings settings) =>
+        Enum.IsDefined(settings.Theme) && Enum.IsDefined(settings.IsolationPolicy);
+
+    private static Problem CreateSettingsCorruptProblem() => new(
+        "SETTINGS_CORRUPT",
+        ProblemStage.Configuration,
+        "problem.settings.invalid",
+        false,
+        Guid.NewGuid().ToString("N"),
+        ["action.settings.restore_backup"]);
 }

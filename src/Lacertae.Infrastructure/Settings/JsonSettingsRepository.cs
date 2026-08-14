@@ -17,7 +17,7 @@ public sealed class JsonSettingsRepository(string path) : ISettingsRepository
         PropertyNameCaseInsensitive = false,
         WriteIndented = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: false) },
     };
 
     private readonly string path = Path.GetFullPath(
@@ -48,6 +48,11 @@ public sealed class JsonSettingsRepository(string path) : ISettingsRepository
             }
 
             if (document.SchemaVersion != LauncherSettings.Default.SchemaVersion)
+            {
+                return Result<LauncherSettings>.Failure(Problem("SETTINGS_CORRUPT"));
+            }
+
+            if (!Enum.IsDefined(document.Theme) || !Enum.IsDefined(document.IsolationPolicy))
             {
                 return Result<LauncherSettings>.Failure(Problem("SETTINGS_CORRUPT"));
             }
