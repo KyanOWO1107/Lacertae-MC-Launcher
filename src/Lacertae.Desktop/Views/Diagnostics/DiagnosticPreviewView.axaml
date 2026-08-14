@@ -1,0 +1,80 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Diagnostics"
+             x:Class="Lacertae.Desktop.Views.Diagnostics.DiagnosticPreviewView"
+             x:DataType="vm:DiagnosticPreviewViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="12">
+      <TextBlock FontSize="20"
+                 FontWeight="SemiBold"
+                 Text="诊断包预览" />
+      <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="仅包含本地脱敏日志、崩溃报告、缩减设置和显式清单；不会上传或发送。"
+                 TextWrapping="Wrap" />
+      <Border Padding="10"
+              Background="{DynamicResource StatusErrorBrush}"
+              IsVisible="{Binding HasError}">
+        <TextBlock Text="{Binding ErrorCode}" />
+      </Border>
+      <ItemsControl ItemsSource="{Binding Items}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:DiagnosticPreviewEntryViewModel">
+            <Border Margin="0,0,0,8"
+                    Padding="12"
+                    Background="{DynamicResource SurfaceElevatedBrush}">
+              <Grid ColumnDefinitions="Auto,*,Auto"
+                    RowDefinitions="Auto,Auto"
+                    ColumnSpacing="10"
+                    RowSpacing="4">
+                <CheckBox IsChecked="{Binding IsIncluded}"
+                          IsEnabled="{Binding IsRequired, Converter={x:Static BoolConverters.Not}}"
+                          VerticalAlignment="Top" />
+                <TextBlock Grid.Column="1"
+                           FontWeight="SemiBold"
+                           Text="{Binding LogicalName}" />
+                <TextBlock Grid.Column="2"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{Binding Size, StringFormat={}{0} B}" />
+                <TextBlock Grid.Row="1"
+                           Grid.Column="1"
+                           Grid.ColumnSpan="2"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{Binding RedactionSummary}"
+                           TextWrapping="Wrap" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button Content="选择保存位置"
+                Click="PickSavePath"
+                IsEnabled="{Binding IsPreviewReady}" />
+        <TextBlock VerticalAlignment="Center"
+                   Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="保存路径只能通过系统对话框选择。"
+                   TextWrapping="Wrap" />
+      </StackPanel>
+      <Border Padding="12"
+              Background="{DynamicResource SurfaceSubtleBrush}"
+              IsVisible="{Binding IsSaveConfirmationOpen}">
+        <StackPanel Spacing="8">
+          <TextBlock FontWeight="SemiBold" Text="确认保存诊断包？" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding PendingSavePath}"
+                     TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="保存前请确认上方清单；M1 不会上传或发送文件。"
+                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="确认保存"
+                    Command="{Binding SaveCommand}" />
+            <Button Content="取消"
+                    Command="{Binding CancelSaveCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
