@@ -15,5 +15,6 @@
   <ItemGroup>
     <None Include="Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Install\Mojang\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Diagnostics\Fixtures\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
