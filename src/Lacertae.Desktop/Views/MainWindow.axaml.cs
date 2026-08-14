@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 using Lacertae.Desktop.ViewModels;
 
 namespace Lacertae.Desktop.Views;
@@ -17,6 +18,7 @@ public sealed partial class MainWindow : Window
         ArgumentNullException.ThrowIfNull(viewModel);
         InitializeComponent();
         DataContext = viewModel;
+        viewModel.PropertyChanged += ViewModelPropertyChanged;
         viewModel.SetViewportWidth(Width);
     }
 
@@ -28,9 +30,11 @@ public sealed partial class MainWindow : Window
         }
 
         viewModel.SetViewportWidth(e.NewSize.Width);
-        ContentPanel.Margin = viewModel.IsCompactNavigation
+        Thickness contentMargin = viewModel.IsCompactNavigation
             ? new Thickness(0, 94, 0, 0)
             : new Thickness(220, 0, 0, 0);
+        ContentPanel.Margin = contentMargin;
+        HomeContentPanel.Margin = contentMargin;
     }
 
     private void NavigateFromButton(object? sender, RoutedEventArgs e)
@@ -43,7 +47,26 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        PageHeading.Focus();
+        FocusPageHeading();
         e.Handled = true;
+    }
+
+    private void FocusPageHeading()
+    {
+        PageHeading.Focus();
+        if (DataContext is MainWindowViewModel viewModel && viewModel.IsGenericPageVisible)
+        {
+            Dispatcher.UIThread.Post(
+                () => PageHeading.Focus(),
+                DispatcherPriority.Loaded);
+        }
+    }
+
+    private void ViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainWindowViewModel.CurrentPage))
+        {
+            FocusPageHeading();
+        }
     }
 }

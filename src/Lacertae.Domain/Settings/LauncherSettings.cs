@@ -1,3 +1,4 @@
+using Lacertae.Domain.Home;
 using Lacertae.Domain.Versions;
 
 namespace Lacertae.Domain.Settings;
@@ -10,8 +11,34 @@ public sealed record LauncherSettings(
     string? DefaultAccountId,
     string? GlobalJavaPath,
     VersionIsolationPolicy IsolationPolicy,
-    bool CheckUpdatesOnStartup)
+    bool CheckUpdatesOnStartup,
+    IReadOnlyList<HomeModulePlacement> HomeModules)
 {
+    private static readonly IReadOnlyList<HomeModulePlacement> DefaultHomeModules =
+        HomeModulePlacement.CopyDefaults();
+
+    public LauncherSettings(
+        int schemaVersion,
+        ThemeMode theme,
+        string? selectedGameRootId,
+        string? selectedVersionFolder,
+        string? defaultAccountId,
+        string? globalJavaPath,
+        VersionIsolationPolicy isolationPolicy,
+        bool checkUpdatesOnStartup)
+        : this(
+            schemaVersion,
+            theme,
+            selectedGameRootId,
+            selectedVersionFolder,
+            defaultAccountId,
+            globalJavaPath,
+            isolationPolicy,
+            checkUpdatesOnStartup,
+            HomeModulePlacement.CopyDefaults())
+    {
+    }
+
     public static LauncherSettings Default => new(
         1,
         ThemeMode.System,
@@ -20,5 +47,6 @@ public sealed record LauncherSettings(
         null,
         null,
         VersionIsolationPolicy.ModLoaderOrNonRelease,
-        true);
+        true,
+        DefaultHomeModules);
 }

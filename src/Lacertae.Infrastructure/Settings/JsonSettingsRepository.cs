@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Lacertae.Application.Settings;
 using Lacertae.Domain.Common;
+using Lacertae.Domain.Home;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
@@ -52,7 +53,9 @@ public sealed class JsonSettingsRepository(string path) : ISettingsRepository
                 return Result<LauncherSettings>.Failure(Problem("SETTINGS_CORRUPT"));
             }
 
-            if (!Enum.IsDefined(document.Theme) || !Enum.IsDefined(document.IsolationPolicy))
+            if (!Enum.IsDefined(document.Theme) ||
+                !Enum.IsDefined(document.IsolationPolicy) ||
+                !HomeModulePlacement.IsValid(document.HomeModules))
             {
                 return Result<LauncherSettings>.Failure(Problem("SETTINGS_CORRUPT"));
             }
@@ -75,6 +78,11 @@ public sealed class JsonSettingsRepository(string path) : ISettingsRepository
         if (settings.SchemaVersion != LauncherSettings.Default.SchemaVersion)
         {
             return Result.Failure(Problem("SETTINGS_VERSION_UNSUPPORTED"));
+        }
+
+        if (!HomeModulePlacement.IsValid(settings.HomeModules))
+        {
+            return Result.Failure(Problem("SETTINGS_CORRUPT"));
         }
 
         string temporaryPath = path + ".tmp";

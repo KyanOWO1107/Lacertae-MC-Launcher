@@ -36,11 +36,38 @@ public sealed class SqliteBackgroundTaskStoreTests
         Assert.Equal((int)OperationState.Failed, reader.GetInt32(2));
     }
 
+    [Fact]
+    public async Task GetActiveAsyncReturnsOnlyPendingAndRunningSnapshots()
+    {
+        using TestRoot root = new();
+        SqliteConnectionFactory factory = new(Path.Combine(root.Path, "launcher.db"));
+        Assert.True((await new SqliteMigrator(factory).MigrateAsync(TestContext.Current.CancellationToken)).IsSuccess);
+        SqliteBackgroundTaskStore store = new(factory);
+
+        Assert.True((await store.SaveAsync(
+            Record("{\"operationId\":\"pending\"}", null, OperationState.Pending, "pending"),
+            TestContext.Current.CancellationToken)).IsSuccess);
+        Assert.True((await store.SaveAsync(
+            Record("{\"operationId\":\"running\"}", null, OperationState.Running, "running"),
+            TestContext.Current.CancellationToken)).IsSuccess);
+        Assert.True((await store.SaveAsync(
+            Record("{\"operationId\":\"done\"}", null, OperationState.Succeeded, "done"),
+            TestContext.Current.CancellationToken)).IsSuccess);
+
+        var result = await store.GetActiveAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.Equal(["pending", "running"], result.Value.Select(static snapshot => snapshot.Id));
+        Assert.All(result.Value, snapshot => Assert.True(
+            snapshot.State is OperationState.Pending or OperationState.Running));
+    }
+
     private static BackgroundTaskRecord Record(
         string frozenPlanJson,
         string? journalJson,
-        OperationState state) => new(
-            "op",
+        OperationState state,
+        string id = "op") => new(
+            id,
             "vanilla-install",
             state,
             frozenPlanJson,

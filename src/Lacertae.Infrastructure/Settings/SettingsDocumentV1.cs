@@ -1,3 +1,4 @@
+using Lacertae.Domain.Home;
 using Lacertae.Domain.Settings;
 using Lacertae.Domain.Versions;
 
@@ -11,7 +12,8 @@ internal sealed record SettingsDocumentV1(
     string? DefaultAccountId,
     string? GlobalJavaPath,
     VersionIsolationPolicy IsolationPolicy,
-    bool CheckUpdatesOnStartup)
+    bool CheckUpdatesOnStartup,
+    IReadOnlyList<HomeModulePlacement>? HomeModules)
 {
     public static SettingsDocumentV1 FromDomain(LauncherSettings settings) => new(
         settings.SchemaVersion,
@@ -21,7 +23,8 @@ internal sealed record SettingsDocumentV1(
         settings.DefaultAccountId,
         settings.GlobalJavaPath,
         settings.IsolationPolicy,
-        settings.CheckUpdatesOnStartup);
+        settings.CheckUpdatesOnStartup,
+        settings.HomeModules);
 
     public LauncherSettings ToDomain() => new(
         SchemaVersion,
@@ -31,5 +34,6 @@ internal sealed record SettingsDocumentV1(
         DefaultAccountId,
         GlobalJavaPath,
         IsolationPolicy,
-        CheckUpdatesOnStartup);
+        CheckUpdatesOnStartup,
+        HomeModules!);
 }

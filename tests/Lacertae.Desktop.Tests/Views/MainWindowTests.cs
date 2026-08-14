@@ -1,4 +1,6 @@
 using Avalonia.Controls;
+using Avalonia.Threading;
+using Lacertae.Application.Home;
 using Lacertae.Application.Startup;
 using Lacertae.Desktop.ViewModels;
 using Lacertae.Desktop.ViewModels.Onboarding;
@@ -36,6 +38,50 @@ public sealed class MainWindowTests
         Assert.Throws<InvalidOperationException>(root.CreateMainWindow);
     }
 
+    [Fact]
+    public void HomeQuickActionExecutesThroughTypedRoute()
+    {
+        MainWindowViewModel viewModel = new();
+        HomeQuickAction action = viewModel.Home.VisibleModules
+            .Single(module => module.Module == Lacertae.Domain.Home.HomeModuleId.QuickActions)
+            .QuickActions.First(static action => action.Id == HomeQuickActionId.OpenSaves);
+
+        viewModel.Home.VisibleModules
+            .Single(module => module.Module == Lacertae.Domain.Home.HomeModuleId.QuickActions)
+            .ExecuteQuickActionCommand.Execute(action);
+
+        Assert.Equal("resources", viewModel.CurrentRouteId);
+    }
+
+    [Fact]
+    public void RepairPreviewRequiresExplicitConfirmationAndDoesNotStartDownload()
+    {
+        MainWindowViewModel viewModel = new();
+
+        viewModel.OpenRepairPreviewCommand.Execute(null);
+
+        Assert.True(viewModel.IsRepairPreviewOpen);
+        Assert.False(string.IsNullOrWhiteSpace(viewModel.RepairPreviewSummary));
+        Assert.Equal(LauncherRouteIds.Downloads, viewModel.CurrentRouteId);
+        Assert.False(viewModel.ConfirmRepairDownloadCommand.CanExecute(null));
+        Assert.False(viewModel.CanConfirmRepairDownload);
+    }
+
+    [AvaloniaFact]
+    public void RepairPreviewPanelIsVisibleOnDownloadsAndConfirmationIsDisabled()
+    {
+        MainWindow window = new();
+        window.Show();
+        MainWindowViewModel viewModel = (MainWindowViewModel)window.DataContext!;
+
+        viewModel.OpenRepairPreviewCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(LauncherRouteIds.Downloads, viewModel.CurrentRouteId);
+        Assert.True(window.FindControl<Button>("ConfirmRepairDownloadButton")!.IsEffectivelyVisible);
+        Assert.False(window.FindControl<Button>("ConfirmRepairDownloadButton")!.IsEnabled);
+    }
+
     [AvaloniaFact]
     public void CompactNavigationIsUsedBelowNineHundredLogicalPixels()
     {
@@ -60,6 +106,7 @@ public sealed class MainWindowTests
 
         settings.Focus();
         settings.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+        Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("settings", ((MainWindowViewModel)window.DataContext!).CurrentRouteId);
         Assert.True(window.FindControl<TextBlock>("PageHeading")!.IsFocused);

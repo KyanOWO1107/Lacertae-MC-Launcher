@@ -70,6 +70,9 @@ public sealed class LaunchMinecraftOperationTests
 
     private sealed class FakeTaskStore : IBackgroundTaskStore
     {
+        public Task<Result<IReadOnlyList<OperationSnapshot>>> GetActiveAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Result<IReadOnlyList<OperationSnapshot>>.Success([]));
+
         public Task<Result<Unit>> SaveAsync(BackgroundTaskRecord record, CancellationToken cancellationToken) => Task.FromResult(Result.Success());
     }
 

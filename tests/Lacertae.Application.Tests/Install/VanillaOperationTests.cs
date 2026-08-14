@@ -110,6 +110,10 @@ public sealed class VanillaOperationTests
     private sealed class FakeTaskStore : IBackgroundTaskStore
     {
         public List<BackgroundTaskRecord> Records { get; } = [];
+
+        public Task<Result<IReadOnlyList<OperationSnapshot>>> GetActiveAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(Result<IReadOnlyList<OperationSnapshot>>.Success([]));
+
         public Task<Result<Unit>> SaveAsync(BackgroundTaskRecord record, CancellationToken cancellationToken)
         {
             Records.Add(record);

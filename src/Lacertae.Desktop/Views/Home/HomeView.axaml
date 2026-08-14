@@ -1,0 +1,122 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:home="using:Lacertae.Desktop.ViewModels.Home"
+             x:Class="Lacertae.Desktop.Views.Home.HomeView"
+             x:DataType="home:HomeViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="16">
+      <Border Name="LaunchCard"
+              Padding="20"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceElevatedBrush}"
+              BorderBrush="{DynamicResource SurfaceBorderBrush}"
+              BorderThickness="1">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnDefinitions="*,Auto"
+              RowSpacing="8"
+              ColumnSpacing="16">
+          <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+            <TextBlock FontSize="22"
+                       FontWeight="SemiBold"
+                       Text="{Binding LaunchCard.VersionSummary}" />
+            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="{Binding LaunchCard.AccountSummary}" />
+          </StackPanel>
+          <Button Name="LaunchButton"
+                  Grid.Row="0"
+                  Grid.Column="1"
+                  Grid.RowSpan="2"
+                  MinWidth="140"
+                  VerticalAlignment="Center"
+                  Content="启动游戏"
+                  Command="{Binding LaunchCard.LaunchCommand}" />
+          <TextBlock Grid.Row="1"
+                     Grid.Column="0"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding LaunchCard.JavaSummary}" />
+          <TextBlock Grid.Row="2"
+                     Grid.Column="0"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding LaunchCard.MaximumMemorySummary}" />
+          <ItemsControl Grid.Row="3"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        ItemsSource="{Binding LaunchCard.Requirements}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Button HorizontalContentAlignment="Left"
+                        Content="{Binding ActionableReason}"
+                        Command="{Binding $parent[UserControl].DataContext.LaunchCard.SelectRequirementCommand}"
+                        CommandParameter="{Binding}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Border Grid.Row="4"
+                  Grid.Column="0"
+                  Grid.ColumnSpan="2"
+                  Padding="12"
+                  CornerRadius="8"
+                  Background="{DynamicResource SurfaceSubtleBrush}"
+                  IsVisible="{Binding RepairPreview.IsOpen}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding RepairPreview.Summary}"
+                         TextWrapping="Wrap" />
+              <Button Name="HomeConfirmRepairDownloadButton"
+                      Content="确认修复（后续版本提供）"
+                      Command="{Binding RepairPreview.ConfirmDownloadCommand}"
+                      IsEnabled="{Binding RepairPreview.CanConfirmDownload}"
+                      ToolTip.Tip="{Binding RepairPreview.ConfirmationUnavailableReason}" />
+              <Button HorizontalAlignment="Left"
+                      Content="关闭预览"
+                      Command="{Binding RepairPreview.CloseCommand}" />
+            </StackPanel>
+          </Border>
+        </Grid>
+      </Border>
+
+      <ItemsControl Name="HomeModules"
+                    ItemsSource="{Binding VisibleModules}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel Orientation="Horizontal" ItemSpacing="12" LineSpacing="12" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <Border Width="280"
+                    MinHeight="110"
+                    Padding="16"
+                    CornerRadius="{DynamicResource CornerRadius12}"
+                    Background="{DynamicResource SurfaceSubtleBrush}"
+                    BorderBrush="{DynamicResource SurfaceBorderBrush}"
+                    BorderThickness="1">
+              <StackPanel Spacing="8">
+                <TextBlock FontSize="17"
+                           FontWeight="SemiBold"
+                           Text="{Binding Title}" />
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{Binding ErrorSummary}"
+                           TextWrapping="Wrap" />
+                <ItemsControl ItemsSource="{Binding QuickActions}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" ItemSpacing="6" LineSpacing="6" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                      <Button Content="{Binding Label}"
+                              Command="{Binding $parent[ItemsControl].DataContext.ExecuteQuickActionCommand}"
+                              CommandParameter="{Binding}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

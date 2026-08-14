@@ -14,6 +14,57 @@ public sealed class SqliteBackgroundTaskStore(SqliteConnectionFactory factory) :
 {
     private readonly SqliteConnectionFactory factory = factory ?? throw new ArgumentNullException(nameof(factory));
 
+    public async Task<Result<IReadOnlyList<OperationSnapshot>>> GetActiveAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using SqliteConnection connection = factory.Create();
+            await connection.OpenAsync(cancellationToken);
+            await using SqliteCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, kind, state, problem_code
+                FROM background_tasks
+                WHERE state IN ($pending, $running)
+                ORDER BY updated_utc ASC, id ASC;
+                """;
+            command.Parameters.AddWithValue("$pending", (int)OperationState.Pending);
+            command.Parameters.AddWithValue("$running", (int)OperationState.Running);
+            await using SqliteDataReader reader = await command.ExecuteReaderAsync(cancellationToken);
+            List<OperationSnapshot> snapshots = [];
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                int stateValue = reader.GetInt32(2);
+                if (!Enum.IsDefined((OperationState)stateValue))
+                {
+                    return Result<IReadOnlyList<OperationSnapshot>>.Failure(
+                        Problem("BACKGROUND_TASK_INVALID", reader.GetString(0)));
+                }
+
+                snapshots.Add(new OperationSnapshot(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    (OperationState)stateValue,
+                    null,
+                    reader.IsDBNull(3) ? null : reader.GetString(3)));
+            }
+
+            return Result<IReadOnlyList<OperationSnapshot>>.Success(snapshots);
+        }
+        catch (SqliteException)
+        {
+            return Result<IReadOnlyList<OperationSnapshot>>.Failure(Problem("BACKGROUND_TASK_UNAVAILABLE", null));
+        }
+        catch (IOException)
+        {
+            return Result<IReadOnlyList<OperationSnapshot>>.Failure(Problem("BACKGROUND_TASK_UNAVAILABLE", null));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result<IReadOnlyList<OperationSnapshot>>.Failure(Problem("BACKGROUND_TASK_UNAVAILABLE", null));
+        }
+    }
+
     public async Task<Result<Unit>> SaveAsync(
         BackgroundTaskRecord record,
         CancellationToken cancellationToken)

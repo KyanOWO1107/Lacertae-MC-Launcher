@@ -4,10 +4,13 @@ using Lacertae.Application.Accessibility;
 using Lacertae.Application.Accounts;
 using Lacertae.Application.GameRoots;
 using Lacertae.Application.Games;
+using Lacertae.Application.Home;
 using Lacertae.Application.Java;
+using Lacertae.Application.Launch;
 using Lacertae.Application.Operations;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
+using Lacertae.Application.SystemInfo;
 using Lacertae.Application.Versions;
 using Lacertae.Desktop.Services;
 using Lacertae.Desktop.ViewModels;
@@ -18,7 +21,9 @@ using Lacertae.Desktop.Views.Startup;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.GameRoots;
+using Lacertae.Domain.Home;
 using Lacertae.Domain.Java;
+using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
@@ -34,7 +39,9 @@ using Lacertae.Infrastructure.Startup;
 using Lacertae.Infrastructure.Storage;
 using Lacertae.Infrastructure.Versions;
 using Lacertae.Platform.Windows.Accessibility;
+using Lacertae.Platform.Windows.Java;
 using Lacertae.Platform.Windows.Storage;
+using Lacertae.Platform.Windows.SystemInfo;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Lacertae.Desktop;
@@ -56,6 +63,7 @@ public sealed class CompositionRoot : IDisposable
         registrations.AddSingleton<IStartupDataRootResolver>(provider => provider.GetRequiredService<DataRootResolver>());
         registrations.AddSingleton<IStartupLoggingInitializer, FileLoggingInitializer>();
         registrations.AddSingleton<IStartupStorageFactory, DurableStartupStorageFactory>();
+        registrations.AddSingleton<IHomeLaunchPlanHost, DefaultHomeLaunchPlanHost>();
         registrations.AddSingleton<IBackgroundTaskStore>(provider =>
         {
             Result<DataRoot> dataRoot = provider.GetRequiredService<DataRootResolver>().Resolve();
@@ -93,6 +101,7 @@ public sealed class CompositionRoot : IDisposable
                 result.Value,
                 onboardingUseCases,
                 preflightState);
+            await TryApplyHomeStateAsync(result.Value, cancellationToken);
         }
 
         return result;
@@ -145,7 +154,107 @@ public sealed class CompositionRoot : IDisposable
     }
 
     private static bool IsValidSettings(LauncherSettings settings) =>
-        Enum.IsDefined(settings.Theme) && Enum.IsDefined(settings.IsolationPolicy);
+        Enum.IsDefined(settings.Theme) &&
+        Enum.IsDefined(settings.IsolationPolicy) &&
+        HomeModulePlacement.IsValid(settings.HomeModules);
+
+    private async Task TryApplyHomeStateAsync(
+        StartupState state,
+        CancellationToken cancellationToken)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            SqliteConnectionFactory connectionFactory = new(state.DataRoot.DatabasePath);
+            IFileSystem fileSystem = services.GetRequiredService<IFileSystem>();
+            IReadOnlyList<IJavaCandidateSource> sources =
+            [
+                new PathJavaCandidateSource(Environment.GetEnvironmentVariable("PATH") ?? string.Empty, fileSystem),
+                new CommonDirectoryJavaCandidateSource(
+                    [
+                        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                    ],
+                    fileSystem),
+                new RegistryJavaCandidateSource(new WindowsRegistryJavaReader(), fileSystem),
+            ];
+            DiscoverJavaInstallations discovery = new(
+                sources,
+                new JavaProbe(new SystemProcessRunner()),
+                fileSystem,
+                new WindowsPathComparer());
+            BuildHomeState buildHomeState = new(
+                new SqliteGameRootRepository(connectionFactory),
+                new SqliteAccountRepository(connectionFactory),
+                new ListGameVersions(
+                    new CmlLibGameEngine(),
+                    new SqliteVersionOverrideRepository(connectionFactory)),
+                discovery,
+                new WindowsMemoryInfo());
+            IReadOnlyList<OperationSnapshot> activeTasks = [];
+            Result<IReadOnlyList<OperationSnapshot>> activeTaskResult = await services
+                .GetRequiredService<IBackgroundTaskStore>()
+                .GetActiveAsync(cancellationToken);
+            bool activeTasksReadFailed = !activeTaskResult.IsSuccess;
+            if (activeTaskResult.IsSuccess)
+            {
+                activeTasks = activeTaskResult.Value;
+            }
+            Result<HomeState> home = await buildHomeState.ExecuteAsync(
+                state.Settings,
+                activeTasks,
+                hasDamagedFiles: false,
+                activeTasksReadFailed: activeTasksReadFailed,
+                cancellationToken: cancellationToken);
+            if (home.IsSuccess && HasDamagedHomeFiles(home.Value, fileSystem))
+            {
+                home = await buildHomeState.ExecuteAsync(
+                    state.Settings,
+                    activeTasks,
+                    hasDamagedFiles: true,
+                    activeTasksReadFailed: activeTasksReadFailed,
+                    cancellationToken: cancellationToken);
+            }
+            if (home.IsSuccess)
+            {
+                services.GetRequiredService<MainWindowViewModel>().ApplyHomeState(home.Value);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Startup remains usable with the safe disabled home state. The
+            // structured startup log records infrastructure diagnostics.
+        }
+    }
+
+    private static bool HasDamagedHomeFiles(HomeState state, IFileSystem fileSystem)
+    {
+        if (state.LaunchContext is not HomeLaunchContext context)
+        {
+            return false;
+        }
+
+        try
+        {
+            string root = context.GameRoot.NormalizedPath;
+            string versionDirectory = Path.Combine(root, "versions", context.Version.FolderName);
+            return !fileSystem.DirectoryExists(Path.Combine(root, "assets")) ||
+                !fileSystem.DirectoryExists(Path.Combine(root, "libraries")) ||
+                !fileSystem.DirectoryExists(versionDirectory);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return true;
+        }
+    }
 
     private static Problem CreateSettingsCorruptProblem() => new(
         "SETTINGS_CORRUPT",

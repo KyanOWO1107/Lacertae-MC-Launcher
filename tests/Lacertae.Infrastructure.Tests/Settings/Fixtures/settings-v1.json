@@ -6,5 +6,11 @@
   "defaultAccountId": null,
   "globalJavaPath": null,
   "isolationPolicy": "modLoaderOrNonRelease",
-  "checkUpdatesOnStartup": true
+  "checkUpdatesOnStartup": true,
+  "homeModules": [
+    { "module": "recentVersions", "order": 0, "isVisible": true },
+    { "module": "activeTasks", "order": 1, "isVisible": true },
+    { "module": "quickActions", "order": 2, "isVisible": true },
+    { "module": "releaseNotes", "order": 3, "isVisible": true }
+  ]
 }

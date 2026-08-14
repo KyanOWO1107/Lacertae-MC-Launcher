@@ -1,8 +1,11 @@
 using System.ComponentModel;
 using System.Windows.Input;
+using Lacertae.Application.Home;
 using Lacertae.Application.Startup;
+using Lacertae.Desktop.ViewModels.Home;
 using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
+using Lacertae.Domain.Home;
 using Lacertae.Domain.Storage;
 
 namespace Lacertae.Desktop.ViewModels;
@@ -59,10 +62,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private LauncherPageViewModel currentPage;
     private bool hasStartupState;
     private bool isOnboardingVisible;
+    private HomeViewModel home;
+    private readonly RepairPreviewViewModel repairPreview = new();
     private readonly DelegateCommand openOnboardingCommand;
+    private readonly IHomeLaunchPlanHost? launchPlanHost;
 
-    public MainWindowViewModel()
+    public MainWindowViewModel(IHomeLaunchPlanHost? launchPlanHost = null)
     {
+        this.launchPlanHost = launchPlanHost;
         NavigationItems =
         [
             new NavigationItemViewModel(LauncherRouteIds.Home, "主页", "启动概览"),
@@ -76,6 +83,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectRoute(currentRouteId);
         Onboarding = new OnboardingViewModel();
         Onboarding.PropertyChanged += OnboardingPropertyChanged;
+        repairPreview.PropertyChanged += RepairPreviewPropertyChanged;
+        OpenRepairPreviewCommand = new DelegateCommand(OpenRepairPreview, () => true);
+        CloseRepairPreviewCommand = repairPreview.CloseCommand;
+        ConfirmRepairDownloadCommand = repairPreview.ConfirmDownloadCommand;
+        home = CreateHomeViewModel(CreateEmptyHomeState());
         openOnboardingCommand = new DelegateCommand(OpenOnboarding, () => CanOpenOnboarding);
         OpenOnboardingCommand = openOnboardingCommand;
     }
@@ -94,6 +106,14 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public JavaSettingsViewModel JavaSettings { get; } = new();
 
+    public HomeViewModel Home => home;
+
+    public bool IsRepairPreviewOpen => repairPreview.IsOpen;
+
+    public string RepairPreviewSummary => repairPreview.Summary;
+
+    public bool CanConfirmRepairDownload => repairPreview.CanConfirmDownload;
+
     public OnboardingViewModel Onboarding { get; private set; }
 
     public bool HasStartupState => hasStartupState;
@@ -105,7 +125,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LauncherRouteIds.Settings,
         StringComparison.Ordinal);
 
+    public bool IsHomePage => string.Equals(CurrentRouteId, LauncherRouteIds.Home, StringComparison.Ordinal);
+
+    public bool IsNotHomePage => !IsHomePage;
+
+    public bool IsGenericPageVisible => IsShellVisible && IsNotHomePage;
+
+    public bool IsHomeContentVisible => IsShellVisible && IsHomePage;
+
     public ICommand OpenOnboardingCommand { get; }
+
+    public ICommand OpenRepairPreviewCommand { get; }
+
+    public ICommand CloseRepairPreviewCommand { get; }
+
+    public ICommand ConfirmRepairDownloadCommand { get; }
 
     public bool IsOnboardingVisible
     {
@@ -122,6 +156,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsShellVisible));
             OnPropertyChanged(nameof(IsShellWideNavigation));
             OnPropertyChanged(nameof(IsShellCompactNavigation));
+            OnPropertyChanged(nameof(IsGenericPageVisible));
+            OnPropertyChanged(nameof(IsHomeContentVisible));
         }
     }
 
@@ -217,6 +253,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CurrentPage));
         OnPropertyChanged(nameof(CurrentPageHeading));
         OnPropertyChanged(nameof(IsSettingsPage));
+        OnPropertyChanged(nameof(IsHomePage));
+        OnPropertyChanged(nameof(IsNotHomePage));
+        OnPropertyChanged(nameof(IsGenericPageVisible));
+        OnPropertyChanged(nameof(IsHomeContentVisible));
         return true;
     }
 
@@ -227,6 +267,70 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             throw new ArgumentException($"Unknown launcher route '{routeId}'.", nameof(routeId));
         }
     }
+
+    public void ApplyHomeState(HomeState state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        home = CreateHomeViewModel(state);
+        OnPropertyChanged(nameof(Home));
+    }
+
+    private HomeViewModel CreateHomeViewModel(HomeState state) => new(
+        state,
+        navigation: routeId => TryNavigate(routeId),
+        repairPreview: OpenRepairPreview,
+        executeQuickAction: ExecuteHomeQuickAction,
+        repairPreviewState: repairPreview,
+        launchPlanHost: launchPlanHost);
+
+    public void OpenRepairPreview()
+    {
+        repairPreview.Open();
+        TryNavigate(LauncherRouteIds.Downloads);
+    }
+
+    private void ExecuteHomeQuickAction(HomeQuickAction action)
+    {
+        string routeId = action.Id switch
+        {
+            HomeQuickActionId.OpenSaves or HomeQuickActionId.OpenVersionDirectory => LauncherRouteIds.Resources,
+            HomeQuickActionId.OpenLogs => LauncherRouteIds.Tasks,
+            _ => throw new ArgumentOutOfRangeException(nameof(action), action.Id, "Unknown home quick action."),
+        };
+
+        if (!TryNavigate(routeId))
+        {
+            throw new InvalidOperationException($"Home quick action route '{routeId}' is unavailable.");
+        }
+    }
+
+    private static HomeState CreateEmptyHomeState() => new(
+        new HomeLaunchCardState(
+            null,
+            null,
+            null,
+            null,
+            false,
+            [new HomeLaunchRequirement(
+                HomeLaunchRequirementId.Root,
+                "游戏根目录",
+                "请选择一个可用的游戏根目录。",
+                LauncherRouteIds.Settings,
+                false)]),
+        [
+            new HomeModuleState(HomeModuleId.RecentVersions, 0, true, "最近版本", "暂无最近版本。", false, null),
+            new HomeModuleState(HomeModuleId.ActiveTasks, 1, true, "活动任务", "暂无活动任务。", false, null),
+            new HomeModuleState(HomeModuleId.QuickActions, 2, true, "快捷操作", "打开存档、版本目录和日志。", false, null),
+            new HomeModuleState(HomeModuleId.ReleaseNotes, 3, true, "发行说明", "暂无发行说明。", false, null),
+        ],
+        [],
+        [
+            new HomeQuickAction(HomeQuickActionId.OpenSaves, "打开存档"),
+            new HomeQuickAction(HomeQuickActionId.OpenVersionDirectory, "打开版本目录"),
+            new HomeQuickAction(HomeQuickActionId.OpenLogs, "打开日志"),
+        ],
+        null,
+        null);
 
     private LauncherPageViewModel CreatePage(string routeId) => pageFactories[routeId]();
 
@@ -257,6 +361,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 IsOnboardingVisible = false;
             }
+        }
+    }
+
+    private void RepairPreviewPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(RepairPreviewViewModel.IsOpen) or nameof(RepairPreviewViewModel.Summary))
+        {
+            OnPropertyChanged(nameof(IsRepairPreviewOpen));
+            OnPropertyChanged(nameof(RepairPreviewSummary));
         }
     }
 

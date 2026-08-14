@@ -86,6 +86,31 @@ public sealed class DiscoverJavaInstallationsTests
         Assert.Equal("JAVA_DISCOVERY_FAILED", result.Problem?.Code);
     }
 
+    [Fact]
+    public async Task ExecuteAsyncIncludesConfiguredManualCandidate()
+    {
+        const string path = @"C:\Java\custom\bin\java.exe";
+        FakeProbe probe = new()
+        {
+            Installations = new Dictionary<string, JavaInstallation>(StringComparer.OrdinalIgnoreCase)
+            {
+                [path] = new("custom", path, 21, "21.0.8", "Vendor", JavaArchitecture.X64, JavaSource.Manual, false),
+            },
+        };
+
+        var result = await new DiscoverJavaInstallations(
+            [],
+            probe,
+            new AlwaysExistingFileSystem(),
+            new WindowsPathComparer()).ExecuteAsync(
+                [new JavaCandidate(path, JavaSource.Manual, false)],
+                TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.Contains(result.Value.Installations, installation => installation.ExecutablePath == path);
+        Assert.Contains(path, probe.Calls);
+    }
+
     private sealed class FakeSource(IReadOnlyList<JavaCandidate> candidates, bool throwOnEnumeration = false) : IJavaCandidateSource
     {
         public async IAsyncEnumerable<JavaCandidate> FindCandidatesAsync(

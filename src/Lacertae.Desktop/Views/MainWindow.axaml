@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Lacertae.Desktop.ViewModels"
+        xmlns:home="using:Lacertae.Desktop.Views.Home"
         xmlns:views="using:Lacertae.Desktop.Views.Java"
         xmlns:onboarding="using:Lacertae.Desktop.Views.Onboarding"
         x:Class="Lacertae.Desktop.Views.MainWindow"
@@ -72,7 +73,8 @@
                   Padding="32"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto"
-                  IsVisible="{Binding IsShellVisible}">
+                  IsVisible="{Binding IsGenericPageVisible}"
+                  Classes="generic-page">
       <StackPanel Spacing="16">
         <TextBlock Name="PageHeading"
                    Focusable="True"
@@ -109,10 +111,39 @@
         </Border>
         <Border Padding="18"
                 CornerRadius="{DynamicResource CornerRadius12}"
+                Background="{DynamicResource SurfaceSubtleBrush}"
+                IsVisible="{Binding IsRepairPreviewOpen}">
+          <StackPanel Spacing="10">
+            <TextBlock FontSize="18"
+                       FontWeight="SemiBold"
+                       Text="修复预览" />
+            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="{Binding RepairPreviewSummary}"
+                       TextWrapping="Wrap" />
+            <Button Name="ConfirmRepairDownloadButton"
+                    HorizontalAlignment="Left"
+                    Content="确认修复（后续版本提供）"
+                    Command="{Binding ConfirmRepairDownloadCommand}"
+                    IsEnabled="{Binding CanConfirmRepairDownload}"
+                    ToolTip.Tip="修复下载将在后续版本提供。" />
+            <Button HorizontalAlignment="Left"
+                    Content="关闭预览"
+                    Command="{Binding CloseRepairPreviewCommand}" />
+          </StackPanel>
+        </Border>
+        <Border Padding="18"
+                CornerRadius="{DynamicResource CornerRadius12}"
                 Background="{DynamicResource SurfaceSubtleBrush}">
           <views:JavaSettingsView DataContext="{Binding JavaSettings}" />
         </Border>
       </StackPanel>
     </ScrollViewer>
+
+    <ContentControl x:Name="HomeContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsHomeContentVisible}">
+      <home:HomeView DataContext="{Binding Home}" />
+    </ContentControl>
   </Grid>
 </Window>

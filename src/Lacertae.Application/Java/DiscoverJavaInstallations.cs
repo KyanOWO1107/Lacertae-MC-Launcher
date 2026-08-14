@@ -1,3 +1,4 @@
+using Lacertae.Application.Home;
 using Lacertae.Application.Storage;
 using Lacertae.Domain.Java;
 using Lacertae.Domain.Problems;
@@ -9,22 +10,32 @@ public sealed class DiscoverJavaInstallations(
     IReadOnlyList<IJavaCandidateSource> sources,
     IJavaProbe probe,
     IFileSystem fileSystem,
-    IPathComparer pathComparer)
+    IPathComparer pathComparer) : IJavaDiscovery, IJavaDiscoveryWithCandidates
 {
     private const int MaxProbeConcurrency = 4;
 
     public async Task<Result<JavaDiscoveryResult>> ExecuteAsync(CancellationToken cancellationToken)
+        => await ExecuteAsync([], cancellationToken);
+
+    public async Task<Result<JavaDiscoveryResult>> ExecuteAsync(
+        IReadOnlyList<JavaCandidate> additionalCandidates,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(pathComparer);
+        ArgumentNullException.ThrowIfNull(additionalCandidates);
+
+        IReadOnlyList<IJavaCandidateSource> candidateSources = additionalCandidates.Count == 0
+            ? sources
+            : [new InlineJavaCandidateSource(additionalCandidates), .. sources];
 
         List<JavaCandidate> candidates = [];
         List<Problem> diagnostics = [];
         int successfulSources = 0;
 
-        foreach (IJavaCandidateSource source in sources)
+        foreach (IJavaCandidateSource source in candidateSources)
         {
             ArgumentNullException.ThrowIfNull(source);
             try
@@ -80,7 +91,7 @@ public sealed class DiscoverJavaInstallations(
             }
         }
 
-        if (successfulSources == 0 && sources.Count > 0)
+        if (successfulSources == 0 && candidateSources.Count > 0)
         {
             return Result<JavaDiscoveryResult>.Failure(new Problem(
                 "JAVA_DISCOVERY_FAILED",
@@ -198,4 +209,18 @@ public sealed class DiscoverJavaInstallations(
         Guid.NewGuid().ToString("N"),
         ["action.java.review_discovery"],
         new Dictionary<string, string> { ["source"] = source.GetType().Name });
+
+    private sealed class InlineJavaCandidateSource(IReadOnlyList<JavaCandidate> candidates) : IJavaCandidateSource
+    {
+        public async IAsyncEnumerable<JavaCandidate> FindCandidatesAsync(
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            foreach (JavaCandidate candidate in candidates)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return candidate;
+                await Task.Yield();
+            }
+        }
+    }
 }

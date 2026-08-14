@@ -12,7 +12,8 @@
     "defaultAccountId",
     "globalJavaPath",
     "isolationPolicy",
-    "checkUpdatesOnStartup"
+    "checkUpdatesOnStartup",
+    "homeModules"
   ],
   "properties": {
     "schemaVersion": {
@@ -60,6 +61,1065 @@
     },
     "checkUpdatesOnStartup": {
       "type": "boolean"
+    },
+    "homeModules": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "module",
+          "order",
+          "isVisible"
+        ],
+        "properties": {
+          "module": {
+            "enum": [
+              "recentVersions",
+              "activeTasks",
+              "quickActions",
+              "releaseNotes"
+            ]
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "isVisible": {
+            "type": "boolean"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "required": ["module"],
+            "properties": {"module": {"const": "recentVersions"}}
+          }
+        },
+        {
+          "contains": {
+            "required": ["module"],
+            "properties": {"module": {"const": "activeTasks"}}
+          }
+        },
+        {
+          "contains": {
+            "required": ["module"],
+            "properties": {"module": {"const": "quickActions"}}
+          }
+        },
+        {
+          "contains": {
+            "required": ["module"],
+            "properties": {"module": {"const": "releaseNotes"}}
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 0}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 1}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 2}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 3}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 4}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 5}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 6}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 7}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 8}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 9}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 10}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 11}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 12}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 13}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 14}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 15}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 16}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 17}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 18}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 19}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 20}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 21}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 22}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 23}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 24}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 25}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 26}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 27}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 28}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 29}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 30}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 31}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 32}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 33}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 34}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 35}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 36}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 37}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 38}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 39}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 40}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 41}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 42}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 43}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 44}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 45}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 46}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 47}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 48}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 49}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 50}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 51}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 52}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 53}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 54}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 55}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 56}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 57}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 58}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 59}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 60}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 61}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 62}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 63}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 64}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 65}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 66}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 67}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 68}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 69}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 70}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 71}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 72}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 73}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 74}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 75}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 76}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 77}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 78}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 79}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 80}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 81}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 82}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 83}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 84}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 85}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 86}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 87}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 88}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 89}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 90}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 91}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 92}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 93}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 94}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 95}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 96}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 97}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 98}}
+            },
+            "minContains": 2
+          }
+        },
+        {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": ["order"],
+              "properties": {"order": {"const": 99}}
+            },
+            "minContains": 2
+          }
+        }
+      ]
     }
   }
 }

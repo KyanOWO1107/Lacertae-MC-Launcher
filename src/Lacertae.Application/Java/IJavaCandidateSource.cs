@@ -1,5 +1,6 @@
 using Lacertae.Domain.Java;
 using Lacertae.Domain.Problems;
+using Lacertae.Domain.Results;
 
 namespace Lacertae.Application.Java;
 
@@ -15,6 +16,13 @@ public sealed record JavaDiscoveryResult(
 public interface IJavaCandidateSource
 {
     IAsyncEnumerable<JavaCandidate> FindCandidatesAsync(CancellationToken cancellationToken);
+}
+
+public interface IJavaDiscoveryWithCandidates
+{
+    Task<Result<JavaDiscoveryResult>> ExecuteAsync(
+        IReadOnlyList<JavaCandidate> additionalCandidates,
+        CancellationToken cancellationToken);
 }
 
 public interface IPathComparer
