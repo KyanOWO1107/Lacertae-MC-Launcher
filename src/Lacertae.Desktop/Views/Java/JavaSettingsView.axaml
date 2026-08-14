@@ -6,15 +6,40 @@
   <StackPanel Spacing="10">
     <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
       <TextBlock FontSize="18" FontWeight="SemiBold" Text="Java 与内存" />
-      <Button Grid.Column="1" Content="{Binding AutomaticOptionLabel}" />
-      <Button Grid.Column="2" Content="{Binding AddPathLabel}" IsEnabled="{Binding CanAddPath}" />
+      <Button Grid.Column="1"
+              Content="{Binding AutomaticOptionLabel}"
+              Command="{Binding SelectAutomaticCommand}" />
+      <Button Grid.Column="2"
+              Content="{Binding AddPathLabel}"
+              Command="{Binding UseManualPathCommand}"
+              IsEnabled="{Binding CanUseManualPath}" />
     </Grid>
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <TextBox PlaceholderText="输入 java.exe/javaw.exe 路径"
+               Text="{Binding ManualPathText}" />
+      <Button Grid.Column="1"
+              Content="验证并使用"
+              Command="{Binding UseManualPathCommand}"
+              IsEnabled="{Binding CanUseManualPath}" />
+    </Grid>
+    <Border Padding="10"
+            Background="{DynamicResource StatusWarningSubtleBrush}"
+            IsVisible="{Binding HasSelectionValidation}">
+      <StackPanel Spacing="4">
+        <TextBlock Foreground="{DynamicResource StatusWarningBrush}"
+                   Text="{Binding SelectionValidationMessage}"
+                   TextWrapping="Wrap" />
+        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="{Binding SelectionValidationCode}" />
+      </StackPanel>
+    </Border>
     <TextBlock IsVisible="{Binding ShowInstallManagedAction}"
                Foreground="{DynamicResource StatusWarningBrush}"
                Text="{Binding MissingRuntimeMessage}" />
     <Button HorizontalAlignment="Left"
             Content="{Binding InstallManagedLabel}"
-            IsVisible="{Binding ShowInstallManagedAction}" />
+            IsVisible="{Binding ShowInstallManagedAction}"
+            Command="{Binding InstallManagedCommand}" />
     <ListBox MaxHeight="190"
              ItemsSource="{Binding Runtimes}"
              SelectedItem="{Binding SelectedRuntime}">

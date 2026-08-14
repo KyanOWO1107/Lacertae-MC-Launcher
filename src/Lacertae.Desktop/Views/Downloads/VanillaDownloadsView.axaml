@@ -1,0 +1,121 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Downloads"
+             x:Class="Lacertae.Desktop.Views.Downloads.VanillaDownloadsView"
+             x:DataType="vm:VanillaDownloadsViewModel">
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="16">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="4">
+          <TextBlock FontSize="28" FontWeight="SemiBold" Text="下载原版" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="仅显示官方原版版本；第三方加载器与资源下载将在后续版本提供。"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+        <Button Grid.Column="1"
+                VerticalAlignment="Center"
+                Content="刷新清单"
+                Command="{Binding RefreshCommand}" />
+      </Grid>
+
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}"
+              BorderBrush="{DynamicResource SurfaceBorderBrush}"
+              BorderThickness="1">
+        <StackPanel Spacing="10">
+          <StackPanel Spacing="4">
+            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="安装到游戏根目录" />
+            <ComboBox ItemsSource="{Binding GameRoots}"
+                      SelectedItem="{Binding SelectedRoot}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate>
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding DisplayName}" />
+                    <TextBlock FontSize="11"
+                               Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="{Binding NormalizedPath}" />
+                  </StackPanel>
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <TextBox PlaceholderText="搜索版本"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+            <ComboBox Grid.Column="1"
+                      MinWidth="130"
+                      SelectedIndex="{Binding TypeFilterIndex}">
+              <ComboBoxItem Content="全部" />
+              <ComboBoxItem Content="正式版" />
+              <ComboBoxItem Content="快照版" />
+            </ComboBox>
+          </Grid>
+
+          <TextBlock IsVisible="{Binding IsLoading}"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="正在读取官方版本清单…" />
+          <Border IsVisible="{Binding HasError}"
+                  Padding="12"
+                  CornerRadius="8"
+                  Background="{DynamicResource StatusWarningSubtleBrush}">
+            <StackPanel Spacing="4">
+              <TextBlock FontWeight="SemiBold" Text="版本清单暂不可用" />
+              <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="错误代码：" />
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding ErrorCode}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <ListBox ItemsSource="{Binding FilteredVersions}"
+                   SelectedItem="{Binding SelectedVersion}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:VanillaVersionItem">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="12" Margin="0,4">
+                  <StackPanel Spacing="2">
+                    <TextBlock FontWeight="SemiBold" Text="{Binding Id}" />
+                    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                               Text="{Binding TypeLabel} · {Binding ReleaseTimeLabel}" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Text="{Binding SourceDisplayLabel}" />
+                  <TextBlock Grid.Column="2"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Text="待预览" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </Border>
+
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceElevatedBrush}"
+              BorderBrush="{DynamicResource SurfaceBorderBrush}"
+              BorderThickness="1"
+              IsVisible="{Binding IsInstallConfirmationOpen}">
+        <StackPanel Spacing="8">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="安装预览" />
+          <TextBlock Text="{Binding InstallSummary}" TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="确认后才会创建后台安装任务。" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="确认安装" Command="{Binding ConfirmInstallCommand}" />
+            <Button Content="取消" Command="{Binding CancelInstallCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Button HorizontalAlignment="Left"
+              Content="生成安装预览"
+              Command="{Binding PrepareInstallCommand}"
+              IsEnabled="{Binding CanPrepareInstall}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

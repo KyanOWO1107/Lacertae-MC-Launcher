@@ -22,7 +22,7 @@ public sealed class MojangVanillaMetadataSourceOptions
     public int MaximumAssetIndexBytes { get; init; } = 32 * 1024 * 1024;
 }
 
-public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource
+public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource, IVanillaVersionCatalog
 {
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(false, true);
     private readonly MojangVanillaMetadataSourceOptions options;
@@ -89,9 +89,63 @@ public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource
         {
             return Result<VanillaMetadataSnapshot>.Failure(UnavailableProblem());
         }
-        catch (Exception exception) when (exception is JsonException or InvalidDataException or UriFormatException or ArgumentException or OverflowException)
+        catch (Exception exception) when (exception is JsonException or InvalidDataException or UriFormatException or ArgumentException or OverflowException or DecoderFallbackException)
         {
             return Result<VanillaMetadataSnapshot>.Failure(InvalidProblem());
+        }
+    }
+
+    public async Task<Result<IReadOnlyList<VanillaVersionSummary>>> ListAsync(
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            string manifestJson = options.VersionManifestJson ?? await LoadTextAsync(
+                options.VersionManifestUri,
+                options.MaximumManifestBytes,
+                cancellationToken);
+            using JsonDocument document = JsonDocument.Parse(manifestJson);
+            JsonElement versions = StrictJsonReader.RequiredProperty(
+                document.RootElement,
+                "versions",
+                JsonValueKind.Array);
+            List<VanillaVersionSummary> result = [];
+            HashSet<string> ids = new(StringComparer.Ordinal);
+            foreach (JsonElement version in versions.EnumerateArray())
+            {
+                if (version.ValueKind != JsonValueKind.Object)
+                {
+                    throw new InvalidDataException("Version manifest entry is not an object.");
+                }
+
+                string id = StrictJsonReader.RequiredString(version, "id");
+                string type = StrictJsonReader.RequiredString(version, "type");
+                DateTimeOffset releaseTime = StrictJsonReader.RequiredDateTimeOffset(version, "releaseTime");
+                Uri metadataUri = ParseOfficialUri(
+                    StrictJsonReader.RequiredString(version, "url"),
+                    "version metadata");
+                string metadataSha1 = RequiredSha1(version, "sha1");
+                if (!IsSafeSegment(id) || string.IsNullOrWhiteSpace(type) || !ids.Add(id))
+                {
+                    throw new InvalidDataException("Version manifest entry is invalid or duplicated.");
+                }
+
+                result.Add(new VanillaVersionSummary(id, type, releaseTime, metadataUri, metadataSha1));
+            }
+
+            return Result<IReadOnlyList<VanillaVersionSummary>>.Success(result);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            return Result<IReadOnlyList<VanillaVersionSummary>>.Failure(UnavailableProblem());
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidDataException or UriFormatException or ArgumentException or OverflowException or DecoderFallbackException)
+        {
+            return Result<IReadOnlyList<VanillaVersionSummary>>.Failure(InvalidProblem());
         }
     }
 

@@ -2,26 +2,33 @@ using Avalonia;
 using Avalonia.Controls;
 using Lacertae.Application.Accessibility;
 using Lacertae.Application.Accounts;
+using Lacertae.Application.Downloads;
 using Lacertae.Application.GameRoots;
 using Lacertae.Application.Games;
 using Lacertae.Application.Home;
+using Lacertae.Application.Install;
 using Lacertae.Application.Java;
 using Lacertae.Application.Launch;
 using Lacertae.Application.Operations;
+using Lacertae.Application.Platform;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
 using Lacertae.Application.SystemInfo;
 using Lacertae.Application.Versions;
 using Lacertae.Desktop.Services;
 using Lacertae.Desktop.ViewModels;
+using Lacertae.Desktop.ViewModels.Downloads;
+using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
 using Lacertae.Desktop.ViewModels.Startup;
+using Lacertae.Desktop.ViewModels.Versions;
 using Lacertae.Desktop.Views;
 using Lacertae.Desktop.Views.Startup;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.GameRoots;
 using Lacertae.Domain.Home;
+using Lacertae.Domain.Install;
 using Lacertae.Domain.Java;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
@@ -29,8 +36,11 @@ using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
 using Lacertae.Domain.Storage;
 using Lacertae.Infrastructure.Accounts;
+using Lacertae.Infrastructure.Downloads;
 using Lacertae.Infrastructure.GameRoots;
 using Lacertae.Infrastructure.Games;
+using Lacertae.Infrastructure.Install;
+using Lacertae.Infrastructure.Install.Mojang;
 using Lacertae.Infrastructure.Java;
 using Lacertae.Infrastructure.Operations;
 using Lacertae.Infrastructure.Processes;
@@ -39,6 +49,7 @@ using Lacertae.Infrastructure.Startup;
 using Lacertae.Infrastructure.Storage;
 using Lacertae.Infrastructure.Versions;
 using Lacertae.Platform.Windows.Accessibility;
+using Lacertae.Platform.Windows.Dialogs;
 using Lacertae.Platform.Windows.Java;
 using Lacertae.Platform.Windows.Storage;
 using Lacertae.Platform.Windows.SystemInfo;
@@ -63,6 +74,8 @@ public sealed class CompositionRoot : IDisposable
         registrations.AddSingleton<IStartupDataRootResolver>(provider => provider.GetRequiredService<DataRootResolver>());
         registrations.AddSingleton<IStartupLoggingInitializer, FileLoggingInitializer>();
         registrations.AddSingleton<IStartupStorageFactory, DurableStartupStorageFactory>();
+        registrations.AddSingleton<IPlatformDialogService, WindowsPlatformDialogService>();
+        registrations.AddSingleton<IJavaProbe>(_ => new JavaProbe(new SystemProcessRunner()));
         registrations.AddSingleton<IHomeLaunchPlanHost, DefaultHomeLaunchPlanHost>();
         registrations.AddSingleton<IBackgroundTaskStore>(provider =>
         {
@@ -101,10 +114,219 @@ public sealed class CompositionRoot : IDisposable
                 result.Value,
                 onboardingUseCases,
                 preflightState);
+            await ConfigureFeaturePagesAsync(result.Value, cancellationToken);
             await TryApplyHomeStateAsync(result.Value, cancellationToken);
         }
 
         return result;
+    }
+
+    private async Task ConfigureFeaturePagesAsync(
+        StartupState state,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        SqliteConnectionFactory connectionFactory = new(state.DataRoot.DatabasePath);
+        SqliteVersionOverrideRepository versionOverrides = new(connectionFactory);
+        ListGameVersions listGameVersions = new(new CmlLibGameEngine(), versionOverrides);
+        JsonSettingsRepository settingsRepository = new(state.DataRoot.SettingsPath);
+        GameRoot? selectedRoot = state.GameRoots.FirstOrDefault(root =>
+            string.Equals(root.Id, state.Settings.SelectedGameRootId, StringComparison.Ordinal));
+        ListedGameVersion? selectedVersion = null;
+        if (selectedRoot is not null && !string.IsNullOrWhiteSpace(state.Settings.SelectedVersionFolder))
+        {
+            try
+            {
+                Result<IReadOnlyList<ListedGameVersion>> listed = await listGameVersions.ExecuteAsync(
+                    selectedRoot,
+                    state.Settings,
+                    cancellationToken);
+                if (listed.IsSuccess)
+                {
+                    selectedVersion = listed.Value.FirstOrDefault(version =>
+                        string.Equals(version.FolderName, state.Settings.SelectedVersionFolder, StringComparison.Ordinal));
+                }
+            }
+            catch (IOException)
+            {
+                // The versions page will expose the typed load failure; Java
+                // settings remain usable without a version-specific requirement.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // The versions page will expose the typed load failure; Java
+                // settings remain usable without a version-specific requirement.
+            }
+            catch (InvalidOperationException)
+            {
+                // The versions page will expose the typed load failure; Java
+                // settings remain usable without a version-specific requirement.
+            }
+        }
+        VersionsViewModel versions = new(
+            new SqliteGameRootRepository(connectionFactory),
+            listGameVersions,
+            state.Settings,
+            services.GetRequiredService<IPlatformDialogService>(),
+            settingsRepository);
+
+        RenameVersionFolder renameVersionFolder = new(
+            versionOverrides,
+            new JsonVersionRenameJournal(Path.Combine(state.DataRoot.LocalPath, "version-rename.journal.json")));
+        SaveVersionOverride saveVersionOverride = new(versionOverrides);
+        IJavaProbe javaProbe = services.GetRequiredService<IJavaProbe>();
+
+        MojangVanillaMetadataSource metadataSource = new(new MojangVanillaMetadataSourceOptions());
+        PlanVanillaInstall planner = new(metadataSource);
+        HttpArtifactDownloader artifactDownloader = new(
+            new DownloadSourceSelector([new OfficialDownloadSource()]));
+        ExecuteVanillaInstall executor = new(
+            artifactDownloader,
+            new StreamingGameFileVerifier(),
+            new SqliteInstallJournalRepository(connectionFactory));
+        BackgroundOperationRunner operationRunner = new();
+        VanillaDownloadsViewModel downloads = new(
+            metadataSource,
+            (root, versionId, cancellationToken) => planner.ExecuteAsync(
+                root,
+                versionId,
+                InstallAction.Install,
+                VanillaPlatform.WindowsX64,
+                cancellationToken),
+            StartVanillaInstallAsync,
+            state.GameRoots,
+            selectedRoot,
+            state.Settings,
+            settingsRepository);
+
+        MainWindowViewModel mainWindow = services.GetRequiredService<MainWindowViewModel>();
+        JavaArchitecture preferredArchitecture = Environment.Is64BitOperatingSystem
+            ? JavaArchitecture.X64
+            : JavaArchitecture.X86;
+        Func<CancellationToken, Task<Result<JavaInstallation>>>? installManagedJava = null;
+        if (selectedVersion is not null)
+        {
+            InstallManagedJava managedJavaInstaller = new(
+                new MojangJavaRuntimeCatalog(new MojangJavaRuntimeCatalogOptions()),
+                artifactDownloader,
+                javaProbe);
+            installManagedJava = installCancellationToken => managedJavaInstaller.ExecuteAsync(
+                state.DataRoot,
+                selectedVersion.Java.Component,
+                preferredArchitecture,
+                null,
+                installCancellationToken);
+        }
+
+        async Task<Result<Unit>> SaveGlobalJavaPathAsync(
+            string? executablePath,
+            CancellationToken saveCancellationToken)
+        {
+            Result<LauncherSettings> current = await settingsRepository.LoadAsync(saveCancellationToken);
+            if (!current.IsSuccess)
+            {
+                return Result<Unit>.Failure(current.Problem!);
+            }
+
+            return await settingsRepository.SaveAsync(
+                current.Value with { GlobalJavaPath = executablePath },
+                saveCancellationToken);
+        }
+
+        mainWindow.ConfigureJavaSettings(new JavaSettingsViewModel(
+            new JavaDiscoveryResult([], []),
+            selectedVersion?.Java.MajorVersion,
+            preferredArchitecture,
+            javaProbe,
+            SaveGlobalJavaPathAsync,
+            installManagedJava));
+        if (OperatingSystem.IsWindows())
+        {
+            _ = RestoreJavaSelectionAsync();
+        }
+        mainWindow.ConfigureFeaturePages(
+            versions,
+            downloads,
+            row => new VersionSettingsViewModel(
+                row,
+                saveVersionOverride,
+                renameVersionFolder,
+                javaProbe,
+                services.GetRequiredService<IBackgroundTaskStore>(),
+                string.IsNullOrWhiteSpace(row.Version.JavaPath)
+                    ? preferredArchitecture
+                    : null));
+
+        async Task RestoreJavaSelectionAsync()
+        {
+            IJavaDiscovery discovery = CreateJavaDiscovery(
+                services.GetRequiredService<IFileSystem>(),
+                javaProbe);
+            await mainWindow.JavaSettings.RefreshAsync(discovery, CancellationToken.None);
+            if (!string.IsNullOrWhiteSpace(state.Settings.GlobalJavaPath))
+            {
+                mainWindow.JavaSettings.ManualPathText = state.Settings.GlobalJavaPath;
+                await mainWindow.JavaSettings.UseManualPathAsync(CancellationToken.None);
+            }
+        }
+
+        async Task<Result<Unit>> StartVanillaInstallAsync(
+            GameRoot root,
+            string versionId,
+            CancellationToken cancellationToken)
+        {
+            if (root.Availability != GameRootAvailability.Available ||
+                string.IsNullOrWhiteSpace(versionId))
+            {
+                return Result.Failure(new Problem(
+                    "VERSION_INSTALL_START_INVALID",
+                    ProblemStage.Installation,
+                    "problem.install.invalid_request",
+                    false,
+                    Guid.NewGuid().ToString("N"),
+                    ["action.install.review"]));
+            }
+
+            InstallVanillaOperation operation = new(
+                planner,
+                executor,
+                root,
+                versionId,
+                VanillaPlatform.WindowsX64,
+                InstallAction.Install,
+                services.GetRequiredService<IBackgroundTaskStore>());
+            _ = operationRunner.RunAsync(
+                operation,
+                new Progress<OperationSnapshot>(_ => { }),
+                cancellationToken);
+            await Task.CompletedTask;
+            return Result.Success();
+        }
+    }
+
+    private static DiscoverJavaInstallations CreateJavaDiscovery(
+        IFileSystem fileSystem,
+        IJavaProbe javaProbe)
+    {
+        List<IJavaCandidateSource> sources =
+        [
+            new PathJavaCandidateSource(Environment.GetEnvironmentVariable("PATH") ?? string.Empty, fileSystem),
+            new CommonDirectoryJavaCandidateSource(
+                [
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                ],
+                fileSystem),
+        ];
+        if (OperatingSystem.IsWindows())
+        {
+            sources.Add(new RegistryJavaCandidateSource(new WindowsRegistryJavaReader(), fileSystem));
+        }
+        return new DiscoverJavaInstallations(
+            sources,
+            javaProbe,
+            fileSystem,
+            new WindowsPathComparer());
     }
 
     public void ApplyTheme(ThemeMode theme, bool reduceMotion = false) =>

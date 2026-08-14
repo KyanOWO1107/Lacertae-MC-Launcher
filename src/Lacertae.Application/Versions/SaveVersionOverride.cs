@@ -40,11 +40,13 @@ public sealed class SaveVersionOverride(IVersionOverrideRepository repository)
         folder is not "." and not ".." &&
         folder.IndexOfAny(['/', '\\', '\0']) < 0;
 
-    private static bool IsValidMemory(int? memoryMb) => memoryMb is null or >= 256;
+    private static bool IsValidMemory(int? memoryMb) => memoryMb is null or >= 512;
 
     private static bool IsValidArguments(IReadOnlyList<string> arguments) =>
         arguments is not null && arguments.All(static argument =>
-            !string.IsNullOrWhiteSpace(argument) && argument.IndexOf('\0') < 0);
+            !string.IsNullOrWhiteSpace(argument) &&
+            argument.IndexOfAny(['\0', '\r', '\n']) < 0 &&
+            System.Text.Encoding.UTF8.GetByteCount(argument) <= 8 * 1024);
 
     private static Problem InvalidProblem() => new(
         "VERSION_OVERRIDE_INVALID",

@@ -1,0 +1,110 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Versions"
+             x:Class="Lacertae.Desktop.Views.Versions.VersionsView"
+             x:DataType="vm:VersionsViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="16">
+      <Grid ColumnDefinitions="*,2*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="6">
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="游戏根目录" />
+          <ComboBox ItemsSource="{Binding GameRoots}"
+                    SelectedItem="{Binding SelectedGameRoot}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <StackPanel Spacing="2">
+                  <TextBlock Text="{Binding DisplayName}" />
+                  <TextBlock FontSize="11"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Text="{Binding NormalizedPath}" />
+                </StackPanel>
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel Grid.Column="1" Spacing="6">
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="搜索版本" />
+          <TextBox PlaceholderText="显示名、物理目录或版本类型"
+                   Text="{Binding SearchText}" />
+        </StackPanel>
+        <Button Grid.Column="2"
+                VerticalAlignment="Bottom"
+                Content="刷新"
+                Command="{Binding RefreshCommand}" />
+      </Grid>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}"
+              IsVisible="{Binding IsRootUnavailable}">
+        <StackPanel Spacing="6">
+          <TextBlock FontSize="17" FontWeight="SemiBold" Text="游戏根目录不可用" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="目录仍保留在设置中；恢复路径后可重新扫描，不会删除原目录。" />
+        </StackPanel>
+      </Border>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource StatusErrorBrush}"
+              IsVisible="{Binding HasError}">
+        <StackPanel Spacing="4">
+          <TextBlock FontWeight="SemiBold" Text="{Binding ErrorCode}" />
+          <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <ListBox MaxHeight="500"
+               ItemsSource="{Binding VisibleVersions}"
+               SelectedItem="{Binding SelectedVersion}"
+               IsVisible="{Binding IsNotLoading}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:VersionRowViewModel">
+            <Border Padding="12"
+                    Margin="0,0,0,8"
+                    CornerRadius="{DynamicResource CornerRadius8}"
+                    Background="{DynamicResource SurfaceElevatedBrush}"
+                    BorderBrush="{DynamicResource SurfaceBorderBrush}"
+                    BorderThickness="1">
+              <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="12" RowSpacing="4">
+                <StackPanel Spacing="2">
+                  <TextBlock FontSize="17" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                  <TextBlock FontSize="12"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Text="{Binding PhysicalFolder}" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{Binding AvailabilityLabel}" />
+                <TextBlock Grid.Row="1"
+                           Foreground="{DynamicResource TextSecondaryBrush}"
+                           Text="{Binding VersionType}" />
+                <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding LoaderLabel}" />
+                  <TextBlock Text="{Binding IsolationLabel}" />
+                  <TextBlock IsVisible="{Binding RequiresIsolationNotice}"
+                             Foreground="{DynamicResource StatusWarningBrush}"
+                             Text="类型未知，请确认隔离策略" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                  <Button Content="编辑设置" Click="EditSettings" />
+                  <Button Content="打开目录"
+                          Command="{Binding $parent[ListBox].DataContext.OpenDirectoryCommand}"
+                          CommandParameter="{Binding}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <TextBlock IsVisible="{Binding IsEmpty}"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="当前筛选条件下没有本地版本。" />
+      <TextBlock IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="正在扫描本地版本……" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

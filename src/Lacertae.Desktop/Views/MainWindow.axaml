@@ -3,6 +3,8 @@
         xmlns:vm="using:Lacertae.Desktop.ViewModels"
         xmlns:home="using:Lacertae.Desktop.Views.Home"
         xmlns:views="using:Lacertae.Desktop.Views.Java"
+        xmlns:versionviews="using:Lacertae.Desktop.Views.Versions"
+        xmlns:downloadviews="using:Lacertae.Desktop.Views.Downloads"
         xmlns:onboarding="using:Lacertae.Desktop.Views.Onboarding"
         x:Class="Lacertae.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -111,33 +113,78 @@
         </Border>
         <Border Padding="18"
                 CornerRadius="{DynamicResource CornerRadius12}"
-                Background="{DynamicResource SurfaceSubtleBrush}"
-                IsVisible="{Binding IsRepairPreviewOpen}">
-          <StackPanel Spacing="10">
-            <TextBlock FontSize="18"
-                       FontWeight="SemiBold"
-                       Text="修复预览" />
-            <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
-                       Text="{Binding RepairPreviewSummary}"
-                       TextWrapping="Wrap" />
-            <Button Name="ConfirmRepairDownloadButton"
-                    HorizontalAlignment="Left"
-                    Content="确认修复（后续版本提供）"
-                    Command="{Binding ConfirmRepairDownloadCommand}"
-                    IsEnabled="{Binding CanConfirmRepairDownload}"
-                    ToolTip.Tip="修复下载将在后续版本提供。" />
-            <Button HorizontalAlignment="Left"
-                    Content="关闭预览"
-                    Command="{Binding CloseRepairPreviewCommand}" />
-          </StackPanel>
-        </Border>
-        <Border Padding="18"
-                CornerRadius="{DynamicResource CornerRadius12}"
                 Background="{DynamicResource SurfaceSubtleBrush}">
           <views:JavaSettingsView DataContext="{Binding JavaSettings}" />
         </Border>
       </StackPanel>
     </ScrollViewer>
+
+    <ContentControl x:Name="VersionsContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsVersionsContentVisible}">
+      <Grid RowDefinitions="Auto,*" RowSpacing="16">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <TextBlock FontSize="30"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource TextPrimaryBrush}"
+                     Text="版本" />
+          <Button Content="关闭版本设置"
+                  IsVisible="{Binding IsVersionSettingsVisible}"
+                  Command="{Binding CloseVersionSettingsCommand}" />
+        </StackPanel>
+        <versionviews:VersionsView Grid.Row="1"
+                                   DataContext="{Binding Versions}"
+                                   IsVisible="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).IsVersionSettingsVisible, Converter={x:Static BoolConverters.Not}}" />
+        <ScrollViewer Grid.Row="1"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto"
+                      IsVisible="{Binding IsVersionSettingsVisible}">
+          <Border Padding="18"
+                  CornerRadius="{DynamicResource CornerRadius12}"
+                  Background="{DynamicResource SurfaceSubtleBrush}">
+            <versionviews:VersionSettingsView DataContext="{Binding VersionSettings}" />
+          </Border>
+        </ScrollViewer>
+      </Grid>
+    </ContentControl>
+
+    <ContentControl x:Name="DownloadsContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsDownloadsContentVisible}">
+      <downloadviews:VanillaDownloadsView DataContext="{Binding Downloads}" />
+    </ContentControl>
+
+    <Border x:Name="RepairPreviewPanel"
+            Width="360"
+            Margin="0,24,24,0"
+            Padding="18"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            CornerRadius="{DynamicResource CornerRadius12}"
+            Background="{DynamicResource SurfaceElevatedBrush}"
+            BorderBrush="{DynamicResource SurfaceBorderBrush}"
+            BorderThickness="1"
+            IsVisible="{Binding IsRepairPreviewOpen}">
+      <StackPanel Spacing="10">
+        <TextBlock FontSize="18"
+                   FontWeight="SemiBold"
+                   Text="修复预览" />
+        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="{Binding RepairPreviewSummary}"
+                   TextWrapping="Wrap" />
+        <Button Name="ConfirmRepairDownloadButton"
+                HorizontalAlignment="Left"
+                Content="确认修复（后续版本提供）"
+                Command="{Binding ConfirmRepairDownloadCommand}"
+                IsEnabled="{Binding CanConfirmRepairDownload}"
+                ToolTip.Tip="修复下载将在后续版本提供。" />
+        <Button HorizontalAlignment="Left"
+                Content="关闭预览"
+                Command="{Binding CloseRepairPreviewCommand}" />
+      </StackPanel>
+    </Border>
 
     <ContentControl x:Name="HomeContentPanel"
                     Margin="220,0,0,0"

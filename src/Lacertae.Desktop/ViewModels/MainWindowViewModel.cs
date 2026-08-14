@@ -1,10 +1,13 @@
 using System.ComponentModel;
 using System.Windows.Input;
 using Lacertae.Application.Home;
+using Lacertae.Application.Java;
 using Lacertae.Application.Startup;
+using Lacertae.Desktop.ViewModels.Downloads;
 using Lacertae.Desktop.ViewModels.Home;
 using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
+using Lacertae.Desktop.ViewModels.Versions;
 using Lacertae.Domain.Home;
 using Lacertae.Domain.Storage;
 
@@ -66,10 +69,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly RepairPreviewViewModel repairPreview = new();
     private readonly DelegateCommand openOnboardingCommand;
     private readonly IHomeLaunchPlanHost? launchPlanHost;
+    private VersionsViewModel? versions;
+    private VanillaDownloadsViewModel? downloads;
+    private VersionSettingsViewModel? versionSettings;
+    private Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory;
+    private JavaSettingsViewModel javaSettings;
 
-    public MainWindowViewModel(IHomeLaunchPlanHost? launchPlanHost = null)
+    public MainWindowViewModel(
+        IHomeLaunchPlanHost? launchPlanHost = null,
+        IJavaProbe? javaProbe = null)
     {
         this.launchPlanHost = launchPlanHost;
+        javaSettings = new(
+            new JavaDiscoveryResult([], []),
+            null,
+            Lacertae.Domain.Java.JavaArchitecture.Unknown,
+            javaProbe);
         NavigationItems =
         [
             new NavigationItemViewModel(LauncherRouteIds.Home, "主页", "启动概览"),
@@ -87,6 +102,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OpenRepairPreviewCommand = new DelegateCommand(OpenRepairPreview, () => true);
         CloseRepairPreviewCommand = repairPreview.CloseCommand;
         ConfirmRepairDownloadCommand = repairPreview.ConfirmDownloadCommand;
+        CloseVersionSettingsCommand = new DelegateCommand(CloseVersionSettings, () => true);
         home = CreateHomeViewModel(CreateEmptyHomeState());
         openOnboardingCommand = new DelegateCommand(OpenOnboarding, () => CanOpenOnboarding);
         OpenOnboardingCommand = openOnboardingCommand;
@@ -104,7 +120,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsLaunchDisabled => !CanLaunch;
 
-    public JavaSettingsViewModel JavaSettings { get; } = new();
+    public JavaSettingsViewModel JavaSettings => javaSettings;
+
+    public VersionsViewModel? Versions => versions;
+
+    public VanillaDownloadsViewModel? Downloads => downloads;
+
+    public VersionSettingsViewModel? VersionSettings => versionSettings;
 
     public HomeViewModel Home => home;
 
@@ -129,7 +151,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsNotHomePage => !IsHomePage;
 
-    public bool IsGenericPageVisible => IsShellVisible && IsNotHomePage;
+    public bool IsVersionsPage => string.Equals(CurrentRouteId, LauncherRouteIds.Versions, StringComparison.Ordinal);
+
+    public bool IsDownloadsPage => string.Equals(CurrentRouteId, LauncherRouteIds.Downloads, StringComparison.Ordinal);
+
+    public bool IsVersionSettingsVisible => IsVersionsPage && VersionSettings is not null;
+
+    public bool IsVersionsContentVisible => IsShellVisible && IsVersionsPage && Versions is not null;
+
+    public bool IsDownloadsContentVisible => IsShellVisible && IsDownloadsPage && Downloads is not null;
+
+    public bool IsGenericPageVisible => IsShellVisible && IsNotHomePage &&
+        !IsVersionsContentVisible && !IsDownloadsContentVisible;
 
     public bool IsHomeContentVisible => IsShellVisible && IsHomePage;
 
@@ -140,6 +173,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public ICommand CloseRepairPreviewCommand { get; }
 
     public ICommand ConfirmRepairDownloadCommand { get; }
+
+    public ICommand CloseVersionSettingsCommand { get; }
 
     public bool IsOnboardingVisible
     {
@@ -156,6 +191,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsShellVisible));
             OnPropertyChanged(nameof(IsShellWideNavigation));
             OnPropertyChanged(nameof(IsShellCompactNavigation));
+            OnPropertyChanged(nameof(IsVersionsContentVisible));
+            OnPropertyChanged(nameof(IsDownloadsContentVisible));
             OnPropertyChanged(nameof(IsGenericPageVisible));
             OnPropertyChanged(nameof(IsHomeContentVisible));
         }
@@ -255,6 +292,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsHomePage));
         OnPropertyChanged(nameof(IsNotHomePage));
+        OnPropertyChanged(nameof(IsVersionsPage));
+        OnPropertyChanged(nameof(IsDownloadsPage));
+        OnPropertyChanged(nameof(IsVersionSettingsVisible));
+        OnPropertyChanged(nameof(IsVersionsContentVisible));
+        OnPropertyChanged(nameof(IsDownloadsContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
         OnPropertyChanged(nameof(IsHomeContentVisible));
         return true;
@@ -273,6 +315,112 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(state);
         home = CreateHomeViewModel(state);
         OnPropertyChanged(nameof(Home));
+    }
+
+    /// <summary>
+    /// Installs the real M1 feature pages after startup has resolved the
+    /// durable data root. The parameterless shell remains dependency-free for
+    /// recovery and headless UI tests.
+    /// </summary>
+    public void ConfigureFeaturePages(
+        VersionsViewModel versions,
+        VanillaDownloadsViewModel downloads,
+        Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory = null)
+    {
+        ArgumentNullException.ThrowIfNull(versions);
+        ArgumentNullException.ThrowIfNull(downloads);
+
+        if (this.versions is not null)
+        {
+            this.versions.EditSettingsRequested -= OnEditSettingsRequested;
+        }
+
+        this.versions = versions;
+        this.downloads = downloads;
+        this.versionSettingsFactory = versionSettingsFactory;
+        versions.EditSettingsRequested += OnEditSettingsRequested;
+        OnPropertyChanged(nameof(Versions));
+        OnPropertyChanged(nameof(Downloads));
+        OnPropertyChanged(nameof(IsVersionsContentVisible));
+        OnPropertyChanged(nameof(IsDownloadsContentVisible));
+        OnPropertyChanged(nameof(IsGenericPageVisible));
+
+        _ = LoadFeaturePagesSafelyAsync(versions, downloads);
+    }
+
+    public void ConfigureJavaSettings(JavaSettingsViewModel settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        javaSettings = settings;
+        OnPropertyChanged(nameof(JavaSettings));
+    }
+
+    private static async Task LoadFeaturePagesSafelyAsync(
+        VersionsViewModel versions,
+        VanillaDownloadsViewModel downloads)
+    {
+        try
+        {
+            await versions.LoadAsync(CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // The page keeps its typed error state; a page-load failure must
+            // not turn an otherwise usable launcher into a startup failure.
+        }
+
+        try
+        {
+            await downloads.LoadAsync(CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // VanillaDownloadsViewModel exposes metadata failures inline.
+        }
+    }
+
+    private void OnEditSettingsRequested(object? sender, VersionRowViewModel row)
+    {
+        if (versionSettingsFactory is null)
+        {
+            return;
+        }
+
+        if (versionSettings is not null)
+        {
+            versionSettings.Changed -= OnVersionSettingsChanged;
+        }
+        versionSettings = versionSettingsFactory(row);
+        versionSettings.Changed += OnVersionSettingsChanged;
+        OnPropertyChanged(nameof(VersionSettings));
+        OnPropertyChanged(nameof(IsVersionSettingsVisible));
+    }
+
+    private void CloseVersionSettings()
+    {
+        if (versionSettings is not null)
+        {
+            versionSettings.Changed -= OnVersionSettingsChanged;
+        }
+        versionSettings = null;
+        OnPropertyChanged(nameof(VersionSettings));
+        OnPropertyChanged(nameof(IsVersionSettingsVisible));
+    }
+
+    private void OnVersionSettingsChanged(object? sender, EventArgs e)
+    {
+        if (versions is null)
+        {
+            return;
+        }
+
+        // A successful save or physical rename invalidates the row snapshot;
+        // reload it before the user can issue another edit against stale data.
+        _ = versions.RefreshVersionsAsync(CancellationToken.None);
+        if (sender is VersionSettingsViewModel)
+        {
+            CloseVersionSettings();
+        }
     }
 
     private HomeViewModel CreateHomeViewModel(HomeState state) => new(

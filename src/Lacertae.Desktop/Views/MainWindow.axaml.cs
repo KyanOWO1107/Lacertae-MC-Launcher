@@ -35,6 +35,8 @@ public sealed partial class MainWindow : Window
             : new Thickness(220, 0, 0, 0);
         ContentPanel.Margin = contentMargin;
         HomeContentPanel.Margin = contentMargin;
+        VersionsContentPanel.Margin = contentMargin;
+        DownloadsContentPanel.Margin = contentMargin;
     }
 
     private void NavigateFromButton(object? sender, RoutedEventArgs e)
