@@ -88,7 +88,8 @@ public sealed class CmlLibProcessFactory
                 Path.GetFullPath(startInfo.FileName),
                 arguments,
                 gameDirectory,
-                new Dictionary<string, SensitiveString>(StringComparer.Ordinal)));
+                new Dictionary<string, SensitiveString>(StringComparer.Ordinal),
+                plan.CorrelationId));
         }
         catch (OperationCanceledException)
         {
