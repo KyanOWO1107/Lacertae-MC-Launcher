@@ -5,6 +5,8 @@
         xmlns:views="using:Lacertae.Desktop.Views.Java"
         xmlns:versionviews="using:Lacertae.Desktop.Views.Versions"
         xmlns:downloadviews="using:Lacertae.Desktop.Views.Downloads"
+        xmlns:taskviews="using:Lacertae.Desktop.Views.Tasks"
+        xmlns:resourceviews="using:Lacertae.Desktop.Views.Resources"
         xmlns:onboarding="using:Lacertae.Desktop.Views.Onboarding"
         x:Class="Lacertae.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
@@ -154,6 +156,20 @@
                     Padding="32"
                     IsVisible="{Binding IsDownloadsContentVisible}">
       <downloadviews:VanillaDownloadsView DataContext="{Binding Downloads}" />
+    </ContentControl>
+
+    <ContentControl x:Name="TasksContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsTasksContentVisible}">
+      <taskviews:TasksView DataContext="{Binding Tasks}" />
+    </ContentControl>
+
+    <ContentControl x:Name="ResourcesContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsResourcesContentVisible}">
+      <resourceviews:LocalResourcesView DataContext="{Binding Resources}" />
     </ContentControl>
 
     <Border x:Name="RepairPreviewPanel"

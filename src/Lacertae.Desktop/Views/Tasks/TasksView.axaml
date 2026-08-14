@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Tasks"
+             x:Class="Lacertae.Desktop.Views.Tasks.TasksView"
+             x:DataType="vm:TasksViewModel">
+  <StackPanel Spacing="12">
+    <TextBlock FontSize="20" FontWeight="SemiBold" Text="后台任务" />
+    <Border Padding="10" Background="{DynamicResource StatusErrorBrush}" IsVisible="{Binding ErrorCode, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+      <TextBlock Text="{Binding ErrorCode}" />
+    </Border>
+    <ListBox ItemsSource="{Binding Items}">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:TaskItemViewModel">
+          <Border Padding="12" Margin="0,0,0,8" Background="{DynamicResource SurfaceElevatedBrush}">
+            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="4">
+              <TextBlock FontWeight="SemiBold" Text="{Binding Kind}" />
+              <TextBlock Grid.Column="1" Text="{Binding StateLabel}" />
+              <TextBlock Grid.Row="1" Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding Stage}" />
+              <StackPanel Grid.Row="2" Spacing="2">
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding ProgressLabel}" />
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding SourceId, StringFormat=来源：{0}}" />
+                <TextBlock Foreground="{DynamicResource TextSecondaryBrush}" Text="{Binding BytesPerSecond, StringFormat=速度：{0:F0} B/s}" />
+                <TextBlock Foreground="{DynamicResource StatusErrorBrush}" Text="{Binding ProblemCode}" IsVisible="{Binding HasProblem}" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                <Button Content="重试" Command="{Binding $parent[ListBox].DataContext.RetryCommand}" CommandParameter="{Binding}" />
+                <Button Content="取消" Command="{Binding $parent[ListBox].DataContext.CancelCommand}" CommandParameter="{Binding}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <Button HorizontalAlignment="Left" Content="清除已完成历史" Command="{Binding ClearCompletedCommand}" />
+  </StackPanel>
+</UserControl>

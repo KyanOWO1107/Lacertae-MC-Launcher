@@ -1,0 +1,25 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Launch"
+             x:Class="Lacertae.Desktop.Views.Launch.GameResultView"
+             x:DataType="vm:GameResultViewModel">
+  <StackPanel Spacing="10">
+    <TextBlock FontSize="20" FontWeight="SemiBold" Text="{Binding Outcome}" />
+    <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+               Text="{Binding CorrelationId}" />
+    <TextBlock IsVisible="{Binding IsAbnormalExit}"
+               Text="{Binding ExitCode, StringFormat=退出码：{0}}" />
+    <Expander Header="技术详情" IsExpanded="{Binding IsTechnicalDetailsExpanded}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="{Binding Problem.Code}" />
+        <ItemsControl ItemsSource="{Binding Findings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding MessageKey}" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Expander>
+  </StackPanel>
+</UserControl>

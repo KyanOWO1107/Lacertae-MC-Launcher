@@ -7,6 +7,8 @@ using Lacertae.Desktop.ViewModels.Downloads;
 using Lacertae.Desktop.ViewModels.Home;
 using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
+using Lacertae.Desktop.ViewModels.Resources;
+using Lacertae.Desktop.ViewModels.Tasks;
 using Lacertae.Desktop.ViewModels.Versions;
 using Lacertae.Domain.Home;
 using Lacertae.Domain.Storage;
@@ -71,6 +73,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private readonly IHomeLaunchPlanHost? launchPlanHost;
     private VersionsViewModel? versions;
     private VanillaDownloadsViewModel? downloads;
+    private TasksViewModel? tasks;
+    private LocalResourcesViewModel? resources;
     private VersionSettingsViewModel? versionSettings;
     private Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory;
     private JavaSettingsViewModel javaSettings;
@@ -126,6 +130,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public VanillaDownloadsViewModel? Downloads => downloads;
 
+    public TasksViewModel? Tasks => tasks;
+
+    public LocalResourcesViewModel? Resources => resources;
+
     public VersionSettingsViewModel? VersionSettings => versionSettings;
 
     public HomeViewModel Home => home;
@@ -155,14 +163,23 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsDownloadsPage => string.Equals(CurrentRouteId, LauncherRouteIds.Downloads, StringComparison.Ordinal);
 
+    public bool IsTasksPage => string.Equals(CurrentRouteId, LauncherRouteIds.Tasks, StringComparison.Ordinal);
+
+    public bool IsResourcesPage => string.Equals(CurrentRouteId, LauncherRouteIds.Resources, StringComparison.Ordinal);
+
     public bool IsVersionSettingsVisible => IsVersionsPage && VersionSettings is not null;
 
     public bool IsVersionsContentVisible => IsShellVisible && IsVersionsPage && Versions is not null;
 
     public bool IsDownloadsContentVisible => IsShellVisible && IsDownloadsPage && Downloads is not null;
 
+    public bool IsTasksContentVisible => IsShellVisible && IsTasksPage && Tasks is not null;
+
+    public bool IsResourcesContentVisible => IsShellVisible && IsResourcesPage && Resources is not null;
+
     public bool IsGenericPageVisible => IsShellVisible && IsNotHomePage &&
-        !IsVersionsContentVisible && !IsDownloadsContentVisible;
+        !IsVersionsContentVisible && !IsDownloadsContentVisible &&
+        !IsTasksContentVisible && !IsResourcesContentVisible;
 
     public bool IsHomeContentVisible => IsShellVisible && IsHomePage;
 
@@ -193,6 +210,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsShellCompactNavigation));
             OnPropertyChanged(nameof(IsVersionsContentVisible));
             OnPropertyChanged(nameof(IsDownloadsContentVisible));
+            OnPropertyChanged(nameof(IsTasksContentVisible));
+            OnPropertyChanged(nameof(IsResourcesContentVisible));
             OnPropertyChanged(nameof(IsGenericPageVisible));
             OnPropertyChanged(nameof(IsHomeContentVisible));
         }
@@ -294,9 +313,13 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsNotHomePage));
         OnPropertyChanged(nameof(IsVersionsPage));
         OnPropertyChanged(nameof(IsDownloadsPage));
+        OnPropertyChanged(nameof(IsTasksPage));
+        OnPropertyChanged(nameof(IsResourcesPage));
         OnPropertyChanged(nameof(IsVersionSettingsVisible));
         OnPropertyChanged(nameof(IsVersionsContentVisible));
         OnPropertyChanged(nameof(IsDownloadsContentVisible));
+        OnPropertyChanged(nameof(IsTasksContentVisible));
+        OnPropertyChanged(nameof(IsResourcesContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
         OnPropertyChanged(nameof(IsHomeContentVisible));
         return true;
@@ -325,7 +348,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public void ConfigureFeaturePages(
         VersionsViewModel versions,
         VanillaDownloadsViewModel downloads,
-        Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory = null)
+        Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory = null,
+        TasksViewModel? tasks = null,
+        LocalResourcesViewModel? resources = null)
     {
         ArgumentNullException.ThrowIfNull(versions);
         ArgumentNullException.ThrowIfNull(downloads);
@@ -337,15 +362,21 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
         this.versions = versions;
         this.downloads = downloads;
+        this.tasks = tasks;
+        this.resources = resources;
         this.versionSettingsFactory = versionSettingsFactory;
         versions.EditSettingsRequested += OnEditSettingsRequested;
         OnPropertyChanged(nameof(Versions));
         OnPropertyChanged(nameof(Downloads));
         OnPropertyChanged(nameof(IsVersionsContentVisible));
         OnPropertyChanged(nameof(IsDownloadsContentVisible));
+        OnPropertyChanged(nameof(Tasks));
+        OnPropertyChanged(nameof(Resources));
+        OnPropertyChanged(nameof(IsTasksContentVisible));
+        OnPropertyChanged(nameof(IsResourcesContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
 
-        _ = LoadFeaturePagesSafelyAsync(versions, downloads);
+        _ = LoadFeaturePagesSafelyAsync(versions, downloads, tasks);
     }
 
     public void ConfigureJavaSettings(JavaSettingsViewModel settings)
@@ -357,7 +388,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private static async Task LoadFeaturePagesSafelyAsync(
         VersionsViewModel versions,
-        VanillaDownloadsViewModel downloads)
+        VanillaDownloadsViewModel downloads,
+        TasksViewModel? tasks)
     {
         try
         {
@@ -376,6 +408,18 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
             // VanillaDownloadsViewModel exposes metadata failures inline.
+        }
+
+        if (tasks is not null)
+        {
+            try
+            {
+                await tasks.RefreshAsync(CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // TasksViewModel exposes its typed store error inline.
+            }
         }
     }
 

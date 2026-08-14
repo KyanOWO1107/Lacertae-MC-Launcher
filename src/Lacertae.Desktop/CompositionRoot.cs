@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Avalonia;
 using Avalonia.Controls;
 using Lacertae.Application.Accessibility;
@@ -11,6 +12,7 @@ using Lacertae.Application.Java;
 using Lacertae.Application.Launch;
 using Lacertae.Application.Operations;
 using Lacertae.Application.Platform;
+using Lacertae.Application.Resources;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
 using Lacertae.Application.SystemInfo;
@@ -20,7 +22,9 @@ using Lacertae.Desktop.ViewModels;
 using Lacertae.Desktop.ViewModels.Downloads;
 using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
+using Lacertae.Desktop.ViewModels.Resources;
 using Lacertae.Desktop.ViewModels.Startup;
+using Lacertae.Desktop.ViewModels.Tasks;
 using Lacertae.Desktop.ViewModels.Versions;
 using Lacertae.Desktop.Views;
 using Lacertae.Desktop.Views.Startup;
@@ -61,6 +65,7 @@ public sealed class CompositionRoot : IDisposable
 {
     private readonly ServiceProvider services;
     private StartupState? startupState;
+    private TasksViewModel? tasksViewModel;
 
     public CompositionRoot()
     {
@@ -185,6 +190,9 @@ public sealed class CompositionRoot : IDisposable
             new StreamingGameFileVerifier(),
             new SqliteInstallJournalRepository(connectionFactory));
         BackgroundOperationRunner operationRunner = new();
+        ConcurrentDictionary<string, CancellationTokenSource> operationCancellation = new(StringComparer.Ordinal);
+        ConcurrentDictionary<string, (GameRoot Root, string VersionId)> operationRequests = new(StringComparer.Ordinal);
+        TasksViewModel? taskPage = null;
         VanillaDownloadsViewModel downloads = new(
             metadataSource,
             (root, versionId, cancellationToken) => planner.ExecuteAsync(
@@ -244,6 +252,11 @@ public sealed class CompositionRoot : IDisposable
         {
             _ = RestoreJavaSelectionAsync();
         }
+        taskPage = new TasksViewModel(
+            taskStore: services.GetRequiredService<IBackgroundTaskStore>(),
+            retry: RetryTaskAsync,
+            cancel: CancelTaskAsync);
+        tasksViewModel = taskPage;
         mainWindow.ConfigureFeaturePages(
             versions,
             downloads,
@@ -255,7 +268,17 @@ public sealed class CompositionRoot : IDisposable
                 services.GetRequiredService<IBackgroundTaskStore>(),
                 string.IsNullOrWhiteSpace(row.Version.JavaPath)
                     ? preferredArchitecture
-                    : null));
+                    : null),
+            taskPage,
+            selectedRoot is not null && selectedVersion is not null
+                ? new LocalResourcesViewModel(
+                    selectedRoot.NormalizedPath,
+                    selectedVersion.IsolationDecision.IsIsolated
+                        ? Path.Combine(selectedRoot.NormalizedPath, "versions", selectedVersion.FolderName)
+                        : null,
+                    services.GetRequiredService<IPlatformDialogService>(),
+                    new ResolveLocalResourceFolders(services.GetRequiredService<IFileSystem>()))
+                : null);
 
         async Task RestoreJavaSelectionAsync()
         {
@@ -295,12 +318,77 @@ public sealed class CompositionRoot : IDisposable
                 VanillaPlatform.WindowsX64,
                 InstallAction.Install,
                 services.GetRequiredService<IBackgroundTaskStore>());
-            _ = operationRunner.RunAsync(
-                operation,
-                new Progress<OperationSnapshot>(_ => { }),
-                cancellationToken);
-            await Task.CompletedTask;
+            CancellationTokenSource operationToken = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            if (!operationCancellation.TryAdd(operation.Id, operationToken))
+            {
+                operationToken.Dispose();
+                return Result.Failure(new Problem(
+                    "VERSION_INSTALL_START_FAILED",
+                    ProblemStage.Installation,
+                    "problem.install.start_failed",
+                    true,
+                    operation.Id,
+                    ["action.install.retry"]));
+            }
+
+            operationRequests[operation.Id] = (root, versionId);
+            _ = RunOperationAsync(operation, operationToken);
             return Result.Success();
+        }
+
+        async Task RunOperationAsync(
+            InstallVanillaOperation operation,
+            CancellationTokenSource operationToken)
+        {
+            try
+            {
+                Result<Unit> result = await operationRunner.RunAsync(
+                    operation,
+                    new Progress<OperationSnapshot>(snapshot => taskPage?.AcceptSnapshot(snapshot)),
+                    operationToken.Token);
+                if (result.IsSuccess)
+                {
+                    operationRequests.TryRemove(operation.Id, out _);
+                }
+            }
+            catch (Exception)
+            {
+                taskPage?.AcceptSnapshot(new OperationSnapshot(
+                    operation.Id,
+                    operation.Kind,
+                    OperationState.Failed,
+                    null,
+                    "BACKGROUND_OPERATION_FAILED"));
+            }
+            finally
+            {
+                operationCancellation.TryRemove(operation.Id, out _);
+                operationToken.Dispose();
+            }
+        }
+
+        async Task RetryTaskAsync(TaskItemViewModel item)
+        {
+            if (!operationRequests.TryGetValue(item.Id, out (GameRoot Root, string VersionId) request))
+            {
+                return;
+            }
+
+            Result<Unit> result = await StartVanillaInstallAsync(request.Root, request.VersionId, CancellationToken.None);
+            if (result.IsSuccess)
+            {
+                operationRequests.TryRemove(item.Id, out _);
+            }
+        }
+
+        Task CancelTaskAsync(TaskItemViewModel item)
+        {
+            if (operationCancellation.TryGetValue(item.Id, out CancellationTokenSource? cancellation))
+            {
+                cancellation.Cancel();
+            }
+
+            return Task.CompletedTask;
         }
     }
 
@@ -372,6 +460,7 @@ public sealed class CompositionRoot : IDisposable
 
     public void Dispose()
     {
+        tasksViewModel?.Dispose();
         services.Dispose();
     }
 
