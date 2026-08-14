@@ -54,13 +54,15 @@ public sealed class BuildHomeStateTests
             SelectedGameRootId = root.Id,
             SelectedVersionFolder = descriptor.FolderName,
             DefaultAccountId = account.Id,
+            GlobalJavaPath = installation.ExecutablePath,
         };
 
+        FakeJavaDiscovery javaDiscovery = new(new JavaDiscoveryResult([installation], []));
         BuildHomeState useCase = new(
             new FakeRootRepository(root),
             new FakeAccountRepository(account),
             new ListGameVersions(new FakeGameEngine(descriptor), new FakeVersionOverrideRepository()),
-            new FakeJavaDiscovery(new JavaDiscoveryResult([installation], [])),
+            javaDiscovery,
             new FakeMemoryInfo(new MemorySnapshot(16UL * 1024 * 1024 * 1024, 8UL * 1024 * 1024 * 1024)));
 
         Result<HomeState> result = await useCase.ExecuteAsync(
@@ -78,6 +80,7 @@ public sealed class BuildHomeStateTests
         Assert.Single(result.Value.ActiveTasks);
         Assert.Contains(result.Value.QuickActions, action => action.Id == HomeQuickActionId.OpenSaves);
         Assert.DoesNotContain("secret-ref-only", result.Value.ToString(), StringComparison.Ordinal);
+        Assert.Contains(javaDiscovery.AdditionalCandidates, candidate => candidate.ExecutablePath == installation.ExecutablePath);
     }
 
     [Fact]
@@ -321,10 +324,20 @@ public sealed class BuildHomeStateTests
             Task.FromResult(Result.Success());
     }
 
-    private sealed class FakeJavaDiscovery(JavaDiscoveryResult result) : IJavaDiscovery
+    private sealed class FakeJavaDiscovery(JavaDiscoveryResult result) : IJavaDiscovery, IJavaDiscoveryWithCandidates
     {
+        public IReadOnlyList<JavaCandidate> AdditionalCandidates { get; private set; } = [];
+
         public Task<Result<JavaDiscoveryResult>> ExecuteAsync(CancellationToken cancellationToken) =>
             Task.FromResult(Result<JavaDiscoveryResult>.Success(result));
+
+        public Task<Result<JavaDiscoveryResult>> ExecuteAsync(
+            IReadOnlyList<JavaCandidate> additionalCandidates,
+            CancellationToken cancellationToken)
+        {
+            AdditionalCandidates = additionalCandidates;
+            return Task.FromResult(Result<JavaDiscoveryResult>.Success(result));
+        }
     }
 
     private sealed class FakeMemoryInfo(MemorySnapshot snapshot) : IMemoryInfo
