@@ -22,7 +22,7 @@ public sealed class StartupCoordinatorTests
         var result = await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.True(result.IsSuccess, result.Problem?.Code);
-        Assert.Equal(["resolve", "logging", "settings", "migrate", "recover", "roots"], events);
+        Assert.Equal(["resolve", "logging", "settings", "migrate", "recover", "install-recover", "roots"], events);
         Assert.Equal(DataRootMode.UserProfile, result.Value.DataRoot.Mode);
         Assert.Equal(LauncherSettings.Default, result.Value.Settings);
         Assert.Single(result.Value.GameRoots);
@@ -121,6 +121,14 @@ public sealed class StartupCoordinatorTests
             events.Add("recover");
             return Task.FromResult(FailureStep == "recover"
                 ? Result.Failure(Problem("TEST_RECOVER_FAILED"))
+                : Result.Success());
+        }
+
+        public Task<Result<Unit>> RecoverVanillaInstallsAsync(CancellationToken cancellationToken)
+        {
+            events.Add("install-recover");
+            return Task.FromResult(FailureStep == "install-recover"
+                ? Result.Failure(Problem("TEST_INSTALL_RECOVER_FAILED"))
                 : Result.Success());
         }
 

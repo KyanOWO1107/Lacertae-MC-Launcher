@@ -1,4 +1,5 @@
 using Lacertae.Application.GameRoots;
+using Lacertae.Application.Install;
 using Lacertae.Application.Settings;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
@@ -9,6 +10,7 @@ using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
 using Lacertae.Domain.Storage;
 using Lacertae.Infrastructure.GameRoots;
+using Lacertae.Infrastructure.Install;
 using Lacertae.Infrastructure.Settings;
 using Lacertae.Infrastructure.Storage;
 using Lacertae.Infrastructure.Versions;
@@ -31,6 +33,7 @@ internal sealed class DurableStartupStorage : IStartupStorage
     private readonly SqliteGameRootRepository gameRootRepository;
     private readonly RefreshGameRootAvailability refreshGameRoots;
     private readonly RenameVersionFolder renameVersionFolder;
+    private readonly RecoverVanillaInstalls recoverVanillaInstalls;
 
     public DurableStartupStorage(DataRoot dataRoot)
     {
@@ -43,6 +46,9 @@ internal sealed class DurableStartupStorage : IStartupStorage
         SqliteVersionOverrideRepository versionOverrides = new(connectionFactory);
         JsonVersionRenameJournal journal = new(Path.Combine(dataRoot.LocalPath, "version-rename.journal.json"));
         renameVersionFolder = new RenameVersionFolder(versionOverrides, journal);
+        recoverVanillaInstalls = new RecoverVanillaInstalls(
+            new SqliteInstallJournalRepository(connectionFactory),
+            new StreamingGameFileVerifier());
     }
 
     public Task<Result<LauncherSettings>> LoadSettingsAsync(CancellationToken cancellationToken) =>
@@ -53,6 +59,9 @@ internal sealed class DurableStartupStorage : IStartupStorage
 
     public Task<Result<Unit>> RecoverVersionRenameAsync(CancellationToken cancellationToken) =>
         renameVersionFolder.RecoverAsync(cancellationToken);
+
+    public Task<Result<Unit>> RecoverVanillaInstallsAsync(CancellationToken cancellationToken) =>
+        recoverVanillaInstalls.ExecuteAsync(new Progress<Lacertae.Domain.Operations.OperationProgress>(), cancellationToken);
 
     public async Task<Result<IReadOnlyList<GameRoot>>> RefreshGameRootsAsync(CancellationToken cancellationToken)
     {
