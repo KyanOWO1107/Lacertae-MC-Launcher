@@ -448,10 +448,10 @@ public sealed class ExecuteVanillaInstall
     }
 
     private static string StagedRelativePath(string operationId, string relativePath) =>
-        $".lacertae/staging/{operationId}/{relativePath.Replace('\\', '/') }";
+        $".lacertae/staging/{operationId}/{relativePath.Replace('\\', '/')}";
 
     private static string QuarantineRelativePath(string operationId, string relativePath) =>
-        $".lacertae/quarantine/{operationId}/{relativePath.Replace('\\', '/') }";
+        $".lacertae/quarantine/{operationId}/{relativePath.Replace('\\', '/')}";
 
     private static bool PathsEqual(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);

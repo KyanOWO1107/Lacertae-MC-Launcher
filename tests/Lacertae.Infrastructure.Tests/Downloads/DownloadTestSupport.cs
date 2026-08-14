@@ -1,6 +1,6 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
-using System.Globalization;
 using System.Security.Cryptography;
 using Lacertae.Application.Downloads;
 using Lacertae.Domain.Downloads;

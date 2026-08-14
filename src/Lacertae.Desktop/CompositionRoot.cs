@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Lacertae.Application.Operations;
 using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
 using Lacertae.Desktop.ViewModels;
@@ -7,6 +8,7 @@ using Lacertae.Desktop.Views;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Storage;
+using Lacertae.Infrastructure.Operations;
 using Lacertae.Infrastructure.Startup;
 using Lacertae.Infrastructure.Storage;
 using Lacertae.Platform.Windows.Storage;
@@ -28,6 +30,16 @@ public sealed class CompositionRoot : IDisposable
         registrations.AddSingleton<IStartupDataRootResolver>(provider => provider.GetRequiredService<DataRootResolver>());
         registrations.AddSingleton<IStartupLoggingInitializer, FileLoggingInitializer>();
         registrations.AddSingleton<IStartupStorageFactory, DurableStartupStorageFactory>();
+        registrations.AddSingleton<IBackgroundTaskStore>(provider =>
+        {
+            Result<DataRoot> dataRoot = provider.GetRequiredService<DataRootResolver>().Resolve();
+            if (!dataRoot.IsSuccess)
+            {
+                throw new InvalidOperationException($"Cannot resolve the background-task database: {dataRoot.Problem?.Code}");
+            }
+
+            return new SqliteBackgroundTaskStore(new SqliteConnectionFactory(dataRoot.Value.DatabasePath));
+        });
         registrations.AddSingleton<StartupCoordinator>();
         registrations.AddSingleton<MainWindowViewModel>();
         registrations.AddTransient<MainWindow>();
