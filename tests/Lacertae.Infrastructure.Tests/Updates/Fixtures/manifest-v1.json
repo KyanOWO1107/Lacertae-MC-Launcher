@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "keyId": "test-key",
+  "channel": "stable",
+  "version": "1.2.0",
+  "publishedUtc": "2026-08-14T12:00:00Z",
+  "minimumLauncherVersion": "1.0.0",
+  "releaseNotes": {
+    "en-US": "Notes",
+    "zh-CN": "说明"
+  },
+  "releaseNotesUrl": "https://updates.example.test/releases/1.2.0",
+  "package": {
+    "runtime": "win-x64",
+    "url": "https://updates.example.test/packages/1.2.0.zip",
+    "size": 128,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "fileManifestSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

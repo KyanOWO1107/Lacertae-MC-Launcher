@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lacertae.invalid/schemas/updates/v1.schema.json",
+  "title": "Lacertae signed update manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "keyId",
+    "channel",
+    "version",
+    "publishedUtc",
+    "minimumLauncherVersion",
+    "releaseNotes",
+    "releaseNotesUrl",
+    "package"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "keyId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,64}$"
+    },
+    "channel": {
+      "type": "string",
+      "enum": ["stable", "preview", "nightly"]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "publishedUtc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "minimumLauncherVersion": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "releaseNotes": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 16,
+      "patternProperties": {
+        "^[a-z]{2,3}(?:-[A-Z]{2})?$": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "additionalProperties": false
+    },
+    "releaseNotesUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "url", "size", "sha256", "fileManifestSha256"],
+      "properties": {
+        "runtime": {
+          "type": "string",
+          "const": "win-x64"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "fileManifestSha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      }
+    }
+  }
+}

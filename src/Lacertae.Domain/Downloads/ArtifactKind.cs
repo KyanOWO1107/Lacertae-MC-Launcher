@@ -10,4 +10,5 @@ public enum ArtifactKind
     AssetObject,
     LoggingConfiguration,
     JavaRuntime,
+    LauncherUpdatePackage,
 }
