@@ -9,9 +9,11 @@ public sealed class AddMicrosoftAccount(
     IAccountRepository repository,
     ISecretVault secretVault,
     IMicrosoftIdentityClient identityClient,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    IAvatarCache? avatarCache = null)
 {
     private readonly TimeProvider timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly IAvatarCache? avatarCache = avatarCache;
 
     public async Task<Result<Account>> ExecuteAsync(CancellationToken cancellationToken)
     {
@@ -60,6 +62,31 @@ public sealed class AddMicrosoftAccount(
                 LastSuccessfulLoginUtc = timeProvider.GetUtcNow(),
             };
 
+        if (avatarCache is not null)
+        {
+            try
+            {
+                Result<AvatarCacheResult> cachedAvatar = await avatarCache.RefreshAsync(
+                    loginValue.SkinUri,
+                    cancellationToken);
+                if (cachedAvatar.IsSuccess &&
+                    !cachedAvatar.Value.UsesPlaceholder &&
+                    IsValidAvatarCacheKey(cachedAvatar.Value.CacheKey))
+                {
+                    account = account with { AvatarCacheKey = cachedAvatar.Value.CacheKey };
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // Avatar failure must never turn a successful login into an
+                // unusable account. Existing local cache remains intact.
+            }
+        }
+
         Result<Unit> saved = await repository.UpsertAsync(account, cancellationToken);
         if (!saved.IsSuccess)
         {
@@ -89,4 +116,11 @@ public sealed class AddMicrosoftAccount(
 
     private static string CreateSecretReference() =>
         Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
+
+    private static bool IsValidAvatarCacheKey(string? cacheKey) =>
+        cacheKey is not null &&
+        cacheKey.Length == 64 &&
+        cacheKey.All(static character =>
+            (character >= '0' && character <= '9') ||
+            (character >= 'a' && character <= 'f'));
 }

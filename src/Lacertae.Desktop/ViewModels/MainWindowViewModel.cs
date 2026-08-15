@@ -3,6 +3,7 @@ using System.Windows.Input;
 using Lacertae.Application.Home;
 using Lacertae.Application.Java;
 using Lacertae.Application.Startup;
+using Lacertae.Desktop.ViewModels.Accounts;
 using Lacertae.Desktop.ViewModels.Downloads;
 using Lacertae.Desktop.ViewModels.Home;
 using Lacertae.Desktop.ViewModels.Java;
@@ -33,6 +34,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 "主页",
                 "准备好后即可启动游戏。",
                 "选择游戏根目录、账号、版本和兼容 Java 后，启动按钮会在启动预检通过时启用。"),
+            [LauncherRouteIds.Accounts] = static () => new LauncherPageViewModel(
+                LauncherRouteIds.Accounts,
+                "账号",
+                "管理离线和 Microsoft 多账号。",
+                "账号公开资料保存在本地数据库；Microsoft 会话材料由平台密钥库保护，界面只展示玩家名、状态和已缓存的本地头像。"),
             [LauncherRouteIds.Versions] = static () => new LauncherPageViewModel(
                 LauncherRouteIds.Versions,
                 "版本",
@@ -76,6 +82,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private VanillaDownloadsViewModel? downloads;
     private TasksViewModel? tasks;
     private LocalResourcesViewModel? resources;
+    private AccountsViewModel? accounts;
     private VersionSettingsViewModel? versionSettings;
     private Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory;
     private JavaSettingsViewModel javaSettings;
@@ -95,6 +102,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         NavigationItems =
         [
             new NavigationItemViewModel(LauncherRouteIds.Home, "主页", "启动概览"),
+            new NavigationItemViewModel(LauncherRouteIds.Accounts, "账号", "离线与 Microsoft 多账号"),
             new NavigationItemViewModel(LauncherRouteIds.Versions, "版本", "本地版本"),
             new NavigationItemViewModel(LauncherRouteIds.Downloads, "下载", "原版安装与修复"),
             new NavigationItemViewModel(LauncherRouteIds.Resources, "资源", "当前版本本地文件夹"),
@@ -137,6 +145,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public LocalResourcesViewModel? Resources => resources;
 
+    public AccountsViewModel? Accounts => accounts;
+
     public UpdateViewModel Updates => updates;
 
     public VersionSettingsViewModel? VersionSettings => versionSettings;
@@ -162,6 +172,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsHomePage => string.Equals(CurrentRouteId, LauncherRouteIds.Home, StringComparison.Ordinal);
 
+    public bool IsAccountsPage => string.Equals(CurrentRouteId, LauncherRouteIds.Accounts, StringComparison.Ordinal);
+
     public bool IsNotHomePage => !IsHomePage;
 
     public bool IsVersionsPage => string.Equals(CurrentRouteId, LauncherRouteIds.Versions, StringComparison.Ordinal);
@@ -182,9 +194,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsResourcesContentVisible => IsShellVisible && IsResourcesPage && Resources is not null;
 
+    public bool IsAccountsContentVisible => IsShellVisible && IsAccountsPage && Accounts is not null;
+
     public bool IsGenericPageVisible => IsShellVisible && IsNotHomePage &&
         !IsVersionsContentVisible && !IsDownloadsContentVisible &&
-        !IsTasksContentVisible && !IsResourcesContentVisible;
+        !IsTasksContentVisible && !IsResourcesContentVisible && !IsAccountsContentVisible;
 
     public bool IsHomeContentVisible => IsShellVisible && IsHomePage;
 
@@ -219,6 +233,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsDownloadsContentVisible));
             OnPropertyChanged(nameof(IsTasksContentVisible));
             OnPropertyChanged(nameof(IsResourcesContentVisible));
+            OnPropertyChanged(nameof(IsAccountsContentVisible));
             OnPropertyChanged(nameof(IsGenericPageVisible));
             OnPropertyChanged(nameof(IsHomeContentVisible));
             OnPropertyChanged(nameof(IsUpdateBannerVisible));
@@ -322,6 +337,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(CurrentPageHeading));
         OnPropertyChanged(nameof(IsSettingsPage));
         OnPropertyChanged(nameof(IsHomePage));
+        OnPropertyChanged(nameof(IsAccountsPage));
         OnPropertyChanged(nameof(IsNotHomePage));
         OnPropertyChanged(nameof(IsVersionsPage));
         OnPropertyChanged(nameof(IsDownloadsPage));
@@ -332,6 +348,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsDownloadsContentVisible));
         OnPropertyChanged(nameof(IsTasksContentVisible));
         OnPropertyChanged(nameof(IsResourcesContentVisible));
+        OnPropertyChanged(nameof(IsAccountsContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
         OnPropertyChanged(nameof(IsHomeContentVisible));
         OnPropertyChanged(nameof(IsUpdateBannerVisible));
@@ -385,8 +402,10 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsDownloadsContentVisible));
         OnPropertyChanged(nameof(Tasks));
         OnPropertyChanged(nameof(Resources));
+        OnPropertyChanged(nameof(Accounts));
         OnPropertyChanged(nameof(IsTasksContentVisible));
         OnPropertyChanged(nameof(IsResourcesContentVisible));
+        OnPropertyChanged(nameof(IsAccountsContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
 
         _ = LoadFeaturePagesSafelyAsync(versions, downloads, tasks);
@@ -397,6 +416,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(settings);
         javaSettings = settings;
         OnPropertyChanged(nameof(JavaSettings));
+    }
+
+    public void ConfigureAccounts(AccountsViewModel accountViewModel)
+    {
+        ArgumentNullException.ThrowIfNull(accountViewModel);
+        accounts = accountViewModel;
+        OnPropertyChanged(nameof(Accounts));
+        OnPropertyChanged(nameof(IsAccountsContentVisible));
+        OnPropertyChanged(nameof(IsGenericPageVisible));
+        _ = LoadAccountsSafelyAsync(accountViewModel);
     }
 
     public void ConfigureUpdates(UpdateViewModel updateViewModel)
@@ -455,6 +484,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             {
                 // TasksViewModel exposes its typed store error inline.
             }
+        }
+    }
+
+    private static async Task LoadAccountsSafelyAsync(AccountsViewModel accounts)
+    {
+        try
+        {
+            await accounts.LoadAsync(CancellationToken.None);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // AccountsViewModel keeps a structured inline error; a page-load
+            // failure must not make the shell unusable.
         }
     }
 

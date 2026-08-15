@@ -60,6 +60,32 @@ public sealed class AccountSessionOrchestrationTests
     }
 
     [Fact]
+    public async Task AddMicrosoftStoresOnlyTheValidatedLocalAvatarCacheKey()
+    {
+        Uri skinUri = new("https://textures.minecraft.net/texture/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        MicrosoftLoginResult login = CreateLoginResult(
+            "Alex",
+            "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            [7, 8, 9],
+            skinUri);
+        string avatarKey = new('a', 64);
+        FakeAvatarCache avatarCache = new(new AvatarCacheResult(avatarKey, false, DateTimeOffset.UtcNow));
+
+        Result<Account> result = await new AddMicrosoftAccount(
+                new FakeAccountRepository(),
+                new FakeSecretVault(),
+                new FakeMicrosoftClient(login),
+                TimeProvider.System,
+                avatarCache)
+            .ExecuteAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.Equal(avatarKey, result.Value.AvatarCacheKey);
+        Assert.Equal(skinUri, avatarCache.LastSkinUri);
+        Assert.DoesNotContain("textures.minecraft.net", result.Value.PlayerName, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task RefreshWritesRotatedCacheOnlyAfterSuccessfulRefresh()
     {
         Account account = MicrosoftAccount("microsoft-account", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "secret-ref");
@@ -169,10 +195,10 @@ public sealed class AccountSessionOrchestrationTests
         Assert.Equal(account.Id, overrides.Stored.Single().AccountId);
     }
 
-    private static MicrosoftLoginResult CreateLoginResult(string name, string uuid, byte[] cache)
+    private static MicrosoftLoginResult CreateLoginResult(string name, string uuid, byte[] cache, Uri? skinUri = null)
     {
         AuthSession session = new(name, uuid, new SensitiveString("access-token"), "msa", "123", DateTimeOffset.UtcNow.AddHours(1));
-        return new MicrosoftLoginResult(name, uuid, session, null, new SecretMaterial(cache));
+        return new MicrosoftLoginResult(name, uuid, session, skinUri, new SecretMaterial(cache));
     }
 
     private static Account MicrosoftAccount(string id, string uuid, string secretRef) => new(
@@ -244,6 +270,19 @@ public sealed class AccountSessionOrchestrationTests
             Stored.Remove(secretRef);
             return Task.FromResult(Result.Success());
         }
+    }
+
+    private sealed class FakeAvatarCache(AvatarCacheResult result) : IAvatarCache
+    {
+        public Uri? LastSkinUri { get; private set; }
+
+        public Task<Result<AvatarCacheResult>> RefreshAsync(Uri? skinUri, CancellationToken cancellationToken)
+        {
+            LastSkinUri = skinUri;
+            return Task.FromResult(Result<AvatarCacheResult>.Success(result));
+        }
+
+        public string? ResolvePath(string? cacheKey) => null;
     }
 
     private sealed class FakeAccountRepository(params Account[] accounts) : IAccountRepository

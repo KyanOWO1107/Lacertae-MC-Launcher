@@ -20,6 +20,7 @@ using Lacertae.Application.Versions;
 using Lacertae.Desktop.Configuration;
 using Lacertae.Desktop.Services;
 using Lacertae.Desktop.ViewModels;
+using Lacertae.Desktop.ViewModels.Accounts;
 using Lacertae.Desktop.ViewModels.Downloads;
 using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
@@ -40,7 +41,10 @@ using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
 using Lacertae.Domain.Storage;
+using Lacertae.Domain.Versions;
 using Lacertae.Infrastructure.Accounts;
+using Lacertae.Infrastructure.Accounts.Avatar;
+using Lacertae.Infrastructure.Accounts.Microsoft;
 using Lacertae.Infrastructure.Downloads;
 using Lacertae.Infrastructure.GameRoots;
 using Lacertae.Infrastructure.Games;
@@ -68,6 +72,7 @@ public sealed class CompositionRoot : IDisposable
     private readonly ServiceProvider services;
     private StartupState? startupState;
     private TasksViewModel? tasksViewModel;
+    private HttpAvatarCache? accountAvatarCache;
 
     public CompositionRoot()
     {
@@ -292,6 +297,15 @@ public sealed class CompositionRoot : IDisposable
                     new ResolveLocalResourceFolders(services.GetRequiredService<IFileSystem>()))
                 : null);
 
+        await ConfigureAccountsPageAsync(
+            state,
+            selectedRoot,
+            selectedVersion,
+            connectionFactory,
+            versionOverrides,
+            settingsRepository,
+            mainWindow);
+
         async Task RestoreJavaSelectionAsync()
         {
             IJavaDiscovery discovery = CreateJavaDiscovery(
@@ -429,6 +443,99 @@ public sealed class CompositionRoot : IDisposable
             new WindowsPathComparer());
     }
 
+    private async Task ConfigureAccountsPageAsync(
+        StartupState state,
+        GameRoot? selectedRoot,
+        ListedGameVersion? selectedVersion,
+        SqliteConnectionFactory connectionFactory,
+        SqliteVersionOverrideRepository versionOverrides,
+        JsonSettingsRepository settingsRepository,
+        MainWindowViewModel mainWindow)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        ArgumentNullException.ThrowIfNull(connectionFactory);
+        ArgumentNullException.ThrowIfNull(versionOverrides);
+        ArgumentNullException.ThrowIfNull(settingsRepository);
+        ArgumentNullException.ThrowIfNull(mainWindow);
+
+        SqliteAccountRepository accountRepository = new(connectionFactory);
+        HttpAvatarCache avatarCache = new(state.DataRoot.LocalPath);
+        accountAvatarCache?.Dispose();
+        accountAvatarCache = avatarCache;
+
+        ISecretVault? secretVault = OperatingSystem.IsWindows()
+            ? new DpapiSecretVault(state.DataRoot.SecretsPath)
+            : null;
+        Result<OAuthClientRegistration?> registration = services
+            .GetRequiredService<OAuthClientRegistrationLoader>()
+            .Load();
+        AddMicrosoftAccount? addMicrosoft = null;
+        bool microsoftLoginConfigured = false;
+        if (registration.IsSuccess && registration.Value is not null && secretVault is not null)
+        {
+            CmlLibMicrosoftIdentityClient identityClient = new(
+                registration.Value.ClientId,
+                registration.Value.Authority);
+            addMicrosoft = new AddMicrosoftAccount(
+                accountRepository,
+                secretVault,
+                identityClient,
+                avatarCache: avatarCache);
+            microsoftLoginConfigured = true;
+        }
+
+        string? versionOverrideAccountId = null;
+        if (selectedRoot is not null && selectedVersion is not null)
+        {
+            try
+            {
+                IReadOnlyList<VersionOverride> overrides = await versionOverrides
+                    .GetForGameRootAsync(selectedRoot.Id, CancellationToken.None);
+                versionOverrideAccountId = overrides.FirstOrDefault(overrideItem =>
+                    string.Equals(
+                        overrideItem.VersionFolder,
+                        selectedVersion.FolderName,
+                        StringComparison.Ordinal))?.AccountId;
+            }
+            catch (Exception exception) when (exception is IOException or InvalidOperationException)
+            {
+                // Account page remains usable; the launch card will still
+                // resolve the persisted default account until the version
+                // override can be read again.
+            }
+        }
+
+        AddOfflineAccount addOffline = new(accountRepository);
+        SetDefaultAccount setDefault = new(accountRepository, settingsRepository);
+        DeleteAccount delete = new(accountRepository, secretVault, settingsRepository);
+        SetVersionAccount? setVersion = selectedRoot is not null && selectedVersion is not null
+            ? new SetVersionAccount(accountRepository, versionOverrides)
+            : null;
+        Func<string, CancellationToken, Task<Result<Unit>>>? setVersionOperation = setVersion is null
+            ? null
+            : (accountId, cancellationToken) => setVersion.ExecuteAsync(
+                selectedRoot!.Id,
+                selectedVersion!.FolderName,
+                accountId,
+                cancellationToken);
+
+        mainWindow.ConfigureAccounts(new AccountsViewModel(
+            new AccountPageOperations(
+                accountRepository.GetAllAsync,
+                addOffline.ExecuteAsync,
+                addMicrosoft is null ? null : addMicrosoft.ExecuteAsync,
+                setDefault.ExecuteAsync,
+                setVersionOperation,
+                delete.ExecuteAsync),
+            avatarCache,
+            state.Settings.DefaultAccountId,
+            versionOverrideAccountId,
+            selectedRoot?.Id,
+            selectedVersion?.FolderName,
+            microsoftLoginConfigured,
+            microsoftConfigurationErrorCode: registration.IsSuccess ? null : registration.Problem?.Code));
+    }
+
     public void ApplyTheme(ThemeMode theme, bool reduceMotion = false) =>
         services.GetRequiredService<ThemeService>().Apply(theme, reduceMotion);
 
@@ -473,6 +580,7 @@ public sealed class CompositionRoot : IDisposable
     public void Dispose()
     {
         tasksViewModel?.Dispose();
+        accountAvatarCache?.Dispose();
         services.Dispose();
     }
 

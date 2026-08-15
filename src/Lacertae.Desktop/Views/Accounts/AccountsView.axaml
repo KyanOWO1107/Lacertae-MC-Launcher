@@ -1,0 +1,192 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lacertae.Desktop.ViewModels.Accounts"
+             x:Class="Lacertae.Desktop.Views.Accounts.AccountsView"
+             x:DataType="vm:AccountsViewModel">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="16">
+      <Border Padding="16"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource StatusInfoSurfaceBrush}"
+              BorderBrush="{DynamicResource SurfaceBorderBrush}"
+              BorderThickness="1">
+        <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="启动账号" />
+          <TextBlock Grid.Column="1"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding ResolvedAccountSourceLabel}" />
+          <TextBlock Grid.Row="1"
+                     FontSize="24"
+                     FontWeight="SemiBold"
+                     Text="{Binding ResolvedAccountSummary}" />
+          <TextBlock Grid.Row="2"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="实际启动时会使用此账号；版本专用账号优先于全局默认账号。"
+                     TextWrapping="Wrap" />
+        </Grid>
+      </Border>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource StatusErrorBrush}"
+              IsVisible="{Binding HasError}">
+        <StackPanel Spacing="4">
+          <TextBlock FontWeight="SemiBold" Text="{Binding ErrorCode}" />
+          <TextBlock Text="{Binding ErrorMessage}" TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}">
+        <StackPanel Spacing="10">
+          <TextBlock FontSize="18" FontWeight="SemiBold" Text="添加离线账号" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="离线账号只在本机使用，会明确标注为离线，不会冒充 Microsoft 正版身份。"
+                     TextWrapping="Wrap" />
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox PlaceholderText="玩家名（3-16 位 Java 名称）"
+                     Text="{Binding OfflinePlayerNameDraft}" />
+            <Button Grid.Column="1"
+                    Content="添加"
+                    Command="{Binding AddOfflineAccountCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Microsoft 正版登录" />
+            <TextBlock Grid.Column="1"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       Text="仅公共客户端" />
+          </Grid>
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="登录会在系统浏览器完成；Lacertae 不要求输入密码，也不会把回调地址、令牌或 OAuth code 绑定到界面。"
+                     TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                     Text="{Binding MicrosoftLoginStatus}"
+                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="Microsoft 登录 / 重新登录"
+                    Command="{Binding MicrosoftLoginCommand}"
+                    IsEnabled="{Binding CanMicrosoftLogin}" />
+            <Button Content="取消登录"
+                    Command="{Binding CancelMicrosoftLoginCommand}"
+                    IsVisible="{Binding IsMicrosoftLoginInProgress}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Padding="14"
+              CornerRadius="{DynamicResource CornerRadius12}"
+              Background="{DynamicResource SurfaceSubtleBrush}"
+              IsVisible="{Binding IsDeleteConfirmationOpen}">
+        <StackPanel Spacing="8">
+          <TextBlock FontSize="17" FontWeight="SemiBold" Text="确认删除账号" />
+          <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="请输入玩家名以确认。删除会先清理受保护的登录材料；失败时账号会保留为删除中，便于重试。"
+                     TextWrapping="Wrap" />
+          <TextBlock FontWeight="SemiBold" Text="{Binding PendingDeleteAccount.PlayerName}" />
+          <TextBox PlaceholderText="再次输入玩家名"
+                   Text="{Binding DeleteConfirmationDraft}" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="确认删除" Command="{Binding ConfirmDeleteCommand}" />
+            <Button Content="取消" Command="{Binding CancelDeleteCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBlock FontSize="20" FontWeight="SemiBold" Text="已保存账号" />
+        <Button Grid.Column="1" Content="刷新" Command="{Binding RefreshCommand}" />
+      </Grid>
+      <TextBlock IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="正在读取账号列表……" />
+      <ItemsControl ItemsSource="{Binding Accounts}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:AccountItemViewModel">
+            <Border Padding="12"
+                    Margin="0,0,0,8"
+                    CornerRadius="{DynamicResource CornerRadius8}"
+                    Background="{DynamicResource SurfaceElevatedBrush}"
+                    BorderBrush="{DynamicResource SurfaceBorderBrush}"
+                    BorderThickness="1">
+              <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+                <Border Width="48"
+                        Height="48"
+                        CornerRadius="24"
+                        Background="{DynamicResource StatusInfoSurfaceBrush}">
+                  <Grid>
+                    <Image Source="{Binding AvatarPath}"
+                           Stretch="UniformToFill"
+                           IsVisible="{Binding UsesPlaceholder, Converter={x:Static BoolConverters.Not}}" />
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               FontSize="20"
+                               FontWeight="SemiBold"
+                               Text="{Binding AvatarFallbackLabel}"
+                               IsVisible="{Binding UsesPlaceholder}" />
+                  </Grid>
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="3">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="{Binding PlayerName}" />
+                    <Border Padding="6,2" CornerRadius="4" Background="{DynamicResource SurfaceSubtleBrush}">
+                      <TextBlock FontSize="11" Text="{Binding AccountTypeLabel}" />
+                    </Border>
+                    <Border Padding="6,2"
+                            CornerRadius="4"
+                            Background="{DynamicResource StatusInfoSurfaceBrush}"
+                            IsVisible="{Binding IsResolved}">
+                      <TextBlock FontSize="11" Text="启动账号" />
+                    </Border>
+                  </StackPanel>
+                  <TextBlock FontSize="12"
+                             Foreground="{DynamicResource TextSecondaryBrush}"
+                             Text="{Binding StatusLabel}" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               Text="默认账号"
+                               IsVisible="{Binding IsDefault}" />
+                    <TextBlock FontSize="12"
+                               Foreground="{DynamicResource TextMutedBrush}"
+                               Text="此版本专用"
+                               IsVisible="{Binding IsVersionOverride}" />
+                  </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Grid.RowSpan="3" Orientation="Vertical" Spacing="5">
+                  <Button Content="设为默认"
+                          Command="{Binding $parent[ItemsControl].DataContext.SetDefaultAccountCommand}"
+                          CommandParameter="{Binding}"
+                          IsEnabled="{Binding CanSetDefault}" />
+                  <Button Content="用于当前版本"
+                          Command="{Binding $parent[ItemsControl].DataContext.SetVersionAccountCommand}"
+                          CommandParameter="{Binding}"
+                          IsEnabled="{Binding CanSetVersionAccount}" />
+                  <Button Content="重新登录"
+                          Command="{Binding $parent[ItemsControl].DataContext.MicrosoftLoginCommand}"
+                          IsVisible="{Binding IsReauthenticationRequired}"
+                          IsEnabled="{Binding $parent[ItemsControl].DataContext.CanMicrosoftLogin}" />
+                  <Button Content="删除"
+                          Command="{Binding $parent[ItemsControl].DataContext.BeginDeleteCommand}"
+                          CommandParameter="{Binding}"
+                          IsEnabled="{Binding IsEnabled}" />
+                </StackPanel>
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock IsVisible="{Binding HasAccounts, Converter={x:Static BoolConverters.Not}}"
+                 Foreground="{DynamicResource TextSecondaryBrush}"
+                 Text="还没有保存的账号。可以先添加一个离线账号。" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

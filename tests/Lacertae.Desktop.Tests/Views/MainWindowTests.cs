@@ -1,12 +1,15 @@
 using Avalonia.Controls;
 using Avalonia.Threading;
+using Lacertae.Application.Accounts;
 using Lacertae.Application.Home;
 using Lacertae.Application.Startup;
 using Lacertae.Desktop.ViewModels;
+using Lacertae.Desktop.ViewModels.Accounts;
 using Lacertae.Desktop.ViewModels.Onboarding;
 using Lacertae.Desktop.Views;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.GameRoots;
+using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
 using Lacertae.Domain.Storage;
@@ -23,11 +26,45 @@ public sealed class MainWindowTests
 
         Assert.Equal("Lacertae", window.Title);
         Assert.Equal(
-            ["home", "versions", "downloads", "resources", "tasks", "settings"],
+            ["home", "accounts", "versions", "downloads", "resources", "tasks", "settings"],
             ((MainWindowViewModel)window.DataContext!).NavigationItems.Select(static item => item.RouteId));
         Assert.NotNull(window.FindControl<Button>("LaunchButton"));
         Assert.False(window.FindControl<Button>("LaunchButton")!.IsEnabled);
         Assert.Equal("未选择游戏版本", window.FindControl<TextBlock>("VersionSummary")!.Text);
+    }
+
+    [Fact]
+    public void AccountsRouteIsNavigableAndHasDedicatedContentState()
+    {
+        MainWindowViewModel viewModel = new();
+
+        Assert.True(viewModel.TryNavigate(LauncherRouteIds.Accounts));
+        Assert.Equal(LauncherRouteIds.Accounts, viewModel.CurrentRouteId);
+        Assert.True(viewModel.IsAccountsPage);
+        Assert.False(viewModel.IsAccountsContentVisible);
+    }
+
+    [AvaloniaFact]
+    public void ConfiguredAccountsRouteRendersDedicatedAccountPanel()
+    {
+        MainWindow window = new();
+        window.Show();
+        MainWindowViewModel viewModel = (MainWindowViewModel)window.DataContext!;
+        viewModel.ConfigureAccounts(new AccountsViewModel(
+            new AccountPageOperations(
+                _ => Task.FromResult<IReadOnlyList<Account>>([]),
+                (_, _) => Task.FromResult(Result<Account>.Failure(new Problem(
+                    "TEST", ProblemStage.Authentication, "test", false, "test", []))),
+                null,
+                (_, _) => Task.FromResult(Result.Success()),
+                null,
+                (_, _) => Task.FromResult(Result.Success())),
+            new EmptyAvatarCache()));
+        viewModel.Navigate(LauncherRouteIds.Accounts);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(viewModel.IsAccountsContentVisible);
+        Assert.True(window.FindControl<Control>("AccountsContentPanel")!.IsEffectivelyVisible);
     }
 
     [Fact]
@@ -259,5 +296,13 @@ public sealed class MainWindowTests
             CancellationToken cancellationToken) =>
             Task.FromResult(Result<OnboardingJavaSelection>.Success(
                 new OnboardingJavaSelection(executablePath, requiredMajor, true)));
+    }
+
+    private sealed class EmptyAvatarCache : IAvatarCache
+    {
+        public Task<Result<AvatarCacheResult>> RefreshAsync(Uri? skinUri, CancellationToken cancellationToken) =>
+            Task.FromResult(Result<AvatarCacheResult>.Success(new AvatarCacheResult(null, true, DateTimeOffset.UtcNow)));
+
+        public string? ResolvePath(string? cacheKey) => null;
     }
 }

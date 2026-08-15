@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Lacertae.Desktop.ViewModels"
+        xmlns:accountviews="using:Lacertae.Desktop.Views.Accounts"
         xmlns:home="using:Lacertae.Desktop.Views.Home"
         xmlns:views="using:Lacertae.Desktop.Views.Java"
         xmlns:versionviews="using:Lacertae.Desktop.Views.Versions"
@@ -36,6 +37,7 @@
                    Foreground="{DynamicResource TextSecondaryBrush}"
                    Text="Minecraft Launcher" />
         <Button HorizontalContentAlignment="Left" Content="主页" Tag="home" Click="NavigateFromButton" />
+        <Button HorizontalContentAlignment="Left" Content="账号" Tag="accounts" Click="NavigateFromButton" />
         <Button HorizontalContentAlignment="Left" Content="版本" Tag="versions" Click="NavigateFromButton" />
         <Button HorizontalContentAlignment="Left" Content="下载" Tag="downloads" Click="NavigateFromButton" />
         <Button HorizontalContentAlignment="Left" Content="资源" Tag="resources" Click="NavigateFromButton" />
@@ -121,6 +123,13 @@
         </Border>
       </StackPanel>
     </ScrollViewer>
+
+    <ContentControl x:Name="AccountsContentPanel"
+                    Margin="220,0,0,0"
+                    Padding="32"
+                    IsVisible="{Binding IsAccountsContentVisible}">
+      <accountviews:AccountsView DataContext="{Binding Accounts}" />
+    </ContentControl>
 
     <ContentControl x:Name="VersionsContentPanel"
                     Margin="220,0,0,0"

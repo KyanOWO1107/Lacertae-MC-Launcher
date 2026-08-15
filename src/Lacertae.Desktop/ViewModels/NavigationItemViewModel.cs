@@ -3,6 +3,7 @@ namespace Lacertae.Desktop.ViewModels;
 public static class LauncherRouteIds
 {
     public const string Home = "home";
+    public const string Accounts = "accounts";
     public const string Versions = "versions";
     public const string Downloads = "downloads";
     public const string Resources = "resources";
