@@ -11,6 +11,7 @@
 - GitHub Releases 静态更新分发说明，包含 `stable`、`preview`、`test`、`nightly` 渠道边界；
 - Microsoft 公共客户端配置门控、严格的 `oauth.local.json` 校验和启动状态提示；
 - Microsoft 认证适配器边界：显式 MSAL 公共客户端、固定 `http://localhost` 回调、按账号缓存桥接、CmlLib Xbox/XSTS/Java Edition 所有权链和稳定错误映射；
+- Microsoft 账号添加、静默刷新、重新认证状态和默认/单版本账号选择的 Application 编排；
 - Microsoft 登录配置与正版登录验收边界文档；
 - 文档维护规则，要求用户可见变化同步更新 README 和本文件。
 
@@ -20,7 +21,7 @@
 - 发布包验证明确要求包含 `LICENSE`，并继续校验第三方声明、SBOM 和文件清单；
 - 发布打包阶段会移除依赖带入的 PDB 调试符号，避免调试产物进入发行 ZIP；
 - README 明确区分 M1 已实现能力、暂未配置的生产能力和后续里程碑；
-- Desktop 仍只完成配置读取和能力提示；账号 DPAPI 持久化、账号编排/头像缓存、实际 UI 接入和真实 Entra 应用验收继续保持未完成。
+- Desktop 仍只完成配置读取和能力提示；账号 DPAPI 持久化、头像缓存、实际账号 UI 接入和真实 Entra 应用验收继续保持未完成。
 
 ### M1 基线
 
