@@ -12,7 +12,7 @@ public sealed record SqliteMigration(int Version, string Sql);
 
 public sealed class SqliteMigrator : IDatabaseMigrator
 {
-    private static readonly IReadOnlyList<SqliteMigration> DefaultMigrations = LoadEmbeddedMigrations();
+    private static readonly SqliteMigration[] DefaultMigrations = LoadEmbeddedMigrations();
 
     private readonly SqliteConnectionFactory factory;
     private readonly IReadOnlyList<SqliteMigration> migrations;
@@ -116,19 +116,56 @@ public sealed class SqliteMigrator : IDatabaseMigrator
         Guid.NewGuid().ToString("N"),
         ["action.database.retry"]);
 
-    private static IReadOnlyList<SqliteMigration> LoadEmbeddedMigrations()
+    private static SqliteMigration[] LoadEmbeddedMigrations()
     {
         Assembly assembly = typeof(SqliteMigrator).Assembly;
-        string? resourceName = assembly.GetManifestResourceNames()
-            .FirstOrDefault(static name => name.EndsWith("Storage.Migrations.001_initial.sql", StringComparison.Ordinal));
-        if (resourceName is null)
+        List<SqliteMigration> migrations = [];
+        foreach (string resourceName in assembly.GetManifestResourceNames())
         {
-            throw new InvalidOperationException("Embedded migration 001_initial.sql is missing.");
+            if (!TryGetMigrationVersion(resourceName, out int version))
+            {
+                continue;
+            }
+
+            using Stream stream = assembly.GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException($"Embedded migration resource '{resourceName}' is missing.");
+            using StreamReader reader = new(stream);
+            migrations.Add(new SqliteMigration(version, reader.ReadToEnd()));
         }
 
-        using Stream stream = assembly.GetManifestResourceStream(resourceName)
-            ?? throw new InvalidOperationException("Embedded migration stream is missing.");
-        using StreamReader reader = new(stream);
-        return [new SqliteMigration(1, reader.ReadToEnd())];
+        if (migrations.Count == 0)
+        {
+            throw new InvalidOperationException("No embedded database migrations were found.");
+        }
+
+        if (migrations.GroupBy(static migration => migration.Version).Any(static group => group.Count() > 1))
+        {
+            throw new InvalidOperationException("Embedded database migration versions must be unique.");
+        }
+
+        return migrations.OrderBy(static migration => migration.Version).ToArray();
+    }
+
+    private static bool TryGetMigrationVersion(string resourceName, out int version)
+    {
+        const string marker = ".Storage.Migrations.";
+        version = 0;
+        int markerStart = resourceName.LastIndexOf(marker, StringComparison.Ordinal);
+        if (markerStart < 0 || !resourceName.EndsWith(".sql", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        int fileNameStart = markerStart + marker.Length;
+        int sqlSuffixStart = resourceName.Length - ".sql".Length;
+        string fileName = resourceName[fileNameStart..sqlSuffixStart];
+        int separator = fileName.IndexOf('_');
+        return separator > 0
+            && int.TryParse(
+                fileName.AsSpan(0, separator),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out version)
+            && version > 0;
     }
 }

@@ -12,6 +12,7 @@
 - Microsoft 公共客户端配置门控、严格的 `oauth.local.json` 校验和启动状态提示；
 - Microsoft 认证适配器边界：显式 MSAL 公共客户端、固定 `http://localhost` 回调、按账号缓存桥接、CmlLib Xbox/XSTS/Java Edition 所有权链和稳定错误映射；
 - Microsoft 账号添加、静默刷新、重新认证状态和默认/单版本账号选择的 Application 编排；
+- SQLite 账号资料 v2 追加迁移：校验稳定账号 ID、账号类型和状态，并建立状态索引；迁移失败会在同一事务中回滚；
 - Windows DPAPI 当前用户密钥库：32 字节随机 entropy、版本化 `LCSV` 密文格式、原子替换、当前用户 ACL、引用校验和稳定错误映射；
 - Microsoft 登录配置与正版登录验收边界文档；
 - 文档维护规则，要求用户可见变化同步更新 README 和本文件。

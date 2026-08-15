@@ -16,7 +16,7 @@ public sealed class SqliteAccountRepositoryTests
             Assert.True((await new SqliteMigrator(factory).MigrateAsync(TestContext.Current.CancellationToken)).IsSuccess);
             SqliteAccountRepository repository = new(factory);
             Account expected = new(
-                "account-1",
+                "0123456789abcdef0123456789abcdef",
                 new AccountIdentity(AccountIdentity.OfflineProviderId, "5627dd98-e6be-3c21-b8a8-e92344183641"),
                 AccountType.Offline,
                 "Alex",
