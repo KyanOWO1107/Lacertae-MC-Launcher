@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Lacertae.Domain\Lacertae.Domain.csproj" />
     <ProjectReference Include="..\Lacertae.Application\Lacertae.Application.csproj" />
+    <PackageReference Include="System.IO.FileSystem.AccessControl" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 </Project>

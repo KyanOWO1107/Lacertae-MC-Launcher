@@ -577,6 +577,7 @@
         "dependencies": {
           "Lacertae.Application": "[1.0.0, )",
           "Lacertae.Domain": "[1.0.0, )",
+          "System.IO.FileSystem.AccessControl": "[5.0.0, )",
           "System.Security.Cryptography.ProtectedData": "[10.0.11, )"
         }
       },
@@ -688,6 +689,12 @@
         "dependencies": {
           "Serilog": "4.2.0"
         }
+      },
+      "System.IO.FileSystem.AccessControl": {
+        "type": "CentralTransitive",
+        "requested": "[5.0.0, )",
+        "resolved": "5.0.0",
+        "contentHash": "SxHB3nuNrpptVk+vZ/F+7OHEpoHUIKKMl02bUmYHQr1r+glbZQxs7pRtsf4ENO29TVm2TH3AEeep2fJcy92oYw=="
       },
       "System.Security.Cryptography.ProtectedData": {
         "type": "CentralTransitive",
