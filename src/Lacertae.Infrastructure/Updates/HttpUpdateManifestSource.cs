@@ -273,6 +273,7 @@ public sealed class HttpUpdateManifestSource : IUpdateManifestSource
     {
         "stable" => Set(UpdateChannel.Stable, out channel),
         "preview" => Set(UpdateChannel.Preview, out channel),
+        "test" => Set(UpdateChannel.Test, out channel),
         "nightly" => Set(UpdateChannel.Nightly, out channel),
         _ => Set(default, out channel, false),
     };

@@ -8,6 +8,7 @@
         xmlns:taskviews="using:Lacertae.Desktop.Views.Tasks"
         xmlns:resourceviews="using:Lacertae.Desktop.Views.Resources"
         xmlns:onboarding="using:Lacertae.Desktop.Views.Onboarding"
+        xmlns:updatevm="using:Lacertae.Desktop.ViewModels.Updates"
         x:Class="Lacertae.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Lacertae"
@@ -208,5 +209,65 @@
                     IsVisible="{Binding IsHomeContentVisible}">
       <home:HomeView DataContext="{Binding Home}" />
     </ContentControl>
+
+    <Border x:Name="UpdateBannerPanel"
+            DataContext="{Binding Updates}"
+            Width="420"
+            Margin="0,18,24,0"
+            Padding="16"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Top"
+            CornerRadius="{DynamicResource CornerRadius12}"
+            Background="{DynamicResource SurfaceElevatedBrush}"
+            BorderBrush="{DynamicResource SurfaceBorderBrush}"
+            BorderThickness="1"
+            IsVisible="{Binding IsBannerVisible}">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock FontSize="17"
+                     FontWeight="SemiBold"
+                     Text="{Binding StateLabel}" />
+          <TextBlock Grid.Column="1"
+                     Foreground="{DynamicResource TextSecondaryBrush}"
+                     Text="{Binding Channel}" />
+        </Grid>
+        <TextBlock Text="{Binding Version, StringFormat=版本：{0}}"
+                   IsVisible="{Binding IsAvailable}" />
+        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="{Binding PackageSize, StringFormat=包大小：{0} bytes}"
+                   IsVisible="{Binding IsAvailable}" />
+        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="下载和安装会先显示确认，启动中的游戏或安装任务不会被打断。"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding IsAvailable}" />
+        <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
+                   Text="更新已暂存，将在退出游戏后应用。"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding IsReadyToApply}" />
+        <TextBlock Foreground="{DynamicResource StatusErrorBrush}"
+                   Text="{Binding ErrorCode}"
+                   IsVisible="{Binding IsFailed}" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Content="查看并下载"
+                  Command="{Binding OpenDownloadConfirmationCommand}"
+                  IsVisible="{Binding IsAvailable}" />
+          <Button Content="确认下载"
+                  Command="{Binding ConfirmDownloadCommand}"
+                  IsVisible="{Binding IsConfirmationOpen}" />
+          <Button Content="取消"
+                  Command="{Binding CancelConfirmationCommand}"
+                  IsVisible="{Binding IsConfirmationOpen}" />
+          <Button Content="退出后更新"
+                  Command="{Binding ApplyOnExitCommand}"
+                  IsVisible="{Binding IsReadyToApply}" />
+          <Button Content="取消暂存"
+                  Command="{Binding CancelStagedCommand}"
+                  IsVisible="{Binding IsReadyToApply}" />
+          <Button Content="重试"
+                  Command="{Binding CheckCommand}"
+                  IsVisible="{Binding IsFailed}" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
   </Grid>
 </Window>

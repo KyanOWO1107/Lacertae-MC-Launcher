@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Lacertae.Application.Updates;
 using Lacertae.Desktop.ViewModels.Startup;
 using Lacertae.Domain.Results;
 using Lacertae.Domain.Settings;
@@ -40,9 +42,14 @@ public sealed class App : Avalonia.Application, IDisposable
         {
             Result<Lacertae.Application.Startup.StartupState> result =
                 await compositionRoot.InitializeAsync(cancellationToken);
-            desktop.MainWindow = result.IsSuccess
+            Window mainWindow = result.IsSuccess
                 ? compositionRoot.CreateMainWindow()
                 : CompositionRoot.CreateRecoveryWindow(result.Problem!, recoveryHost);
+            desktop.MainWindow = mainWindow;
+            if (result.IsSuccess)
+            {
+                ScheduleUpdateHealthConfirmation(mainWindow, result.Value.DataRoot.UpdatesPath);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -54,6 +61,37 @@ public sealed class App : Avalonia.Application, IDisposable
                 CompositionRoot.CreateStartupFailureProblem(),
                 recoveryHost);
         }
+    }
+
+    private static void ScheduleUpdateHealthConfirmation(Window mainWindow, string updatesPath)
+    {
+        string[] arguments = Environment.GetCommandLineArgs().Skip(1).ToArray();
+        if (arguments.Length != 2 || !string.Equals(arguments[0], "--update-health", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string nonce = arguments[1];
+        void Confirm(object? sender, EventArgs e)
+        {
+            mainWindow.Opened -= Confirm;
+            Dispatcher.UIThread.Post(
+                async () =>
+                {
+                    await new ConfirmUpdateHealth().ExecuteAsync(
+                        new ConfirmUpdateHealthRequest(
+                            updatesPath,
+                            nonce,
+                            Environment.ProcessId,
+                            StartupCompleted: true,
+                            MainWindowRendered: true,
+                            CorrelationId: "update-health"),
+                        CancellationToken.None);
+                },
+                DispatcherPriority.Loaded);
+        }
+
+        mainWindow.Opened += Confirm;
     }
 
     private sealed class DesktopRecoveryHost(

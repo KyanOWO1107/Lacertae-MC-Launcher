@@ -9,6 +9,7 @@ using Lacertae.Desktop.ViewModels.Java;
 using Lacertae.Desktop.ViewModels.Onboarding;
 using Lacertae.Desktop.ViewModels.Resources;
 using Lacertae.Desktop.ViewModels.Tasks;
+using Lacertae.Desktop.ViewModels.Updates;
 using Lacertae.Desktop.ViewModels.Versions;
 using Lacertae.Domain.Home;
 using Lacertae.Domain.Storage;
@@ -78,6 +79,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private VersionSettingsViewModel? versionSettings;
     private Func<VersionRowViewModel, VersionSettingsViewModel>? versionSettingsFactory;
     private JavaSettingsViewModel javaSettings;
+    private UpdateViewModel updates;
 
     public MainWindowViewModel(
         IHomeLaunchPlanHost? launchPlanHost = null,
@@ -89,6 +91,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             null,
             Lacertae.Domain.Java.JavaArchitecture.Unknown,
             javaProbe);
+        updates = new UpdateViewModel();
         NavigationItems =
         [
             new NavigationItemViewModel(LauncherRouteIds.Home, "主页", "启动概览"),
@@ -133,6 +136,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public TasksViewModel? Tasks => tasks;
 
     public LocalResourcesViewModel? Resources => resources;
+
+    public UpdateViewModel Updates => updates;
 
     public VersionSettingsViewModel? VersionSettings => versionSettings;
 
@@ -183,6 +188,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public bool IsHomeContentVisible => IsShellVisible && IsHomePage;
 
+    public bool IsUpdateBannerVisible => IsShellVisible && updates.IsBannerVisible;
+
     public ICommand OpenOnboardingCommand { get; }
 
     public ICommand OpenRepairPreviewCommand { get; }
@@ -214,6 +221,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             OnPropertyChanged(nameof(IsResourcesContentVisible));
             OnPropertyChanged(nameof(IsGenericPageVisible));
             OnPropertyChanged(nameof(IsHomeContentVisible));
+            OnPropertyChanged(nameof(IsUpdateBannerVisible));
         }
     }
 
@@ -322,6 +330,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(IsResourcesContentVisible));
         OnPropertyChanged(nameof(IsGenericPageVisible));
         OnPropertyChanged(nameof(IsHomeContentVisible));
+        OnPropertyChanged(nameof(IsUpdateBannerVisible));
         return true;
     }
 
@@ -384,6 +393,28 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ArgumentNullException.ThrowIfNull(settings);
         javaSettings = settings;
         OnPropertyChanged(nameof(JavaSettings));
+    }
+
+    public void ConfigureUpdates(UpdateViewModel updateViewModel)
+    {
+        ArgumentNullException.ThrowIfNull(updateViewModel);
+        if (updates is not null)
+        {
+            updates.PropertyChanged -= OnUpdatesPropertyChanged;
+        }
+
+        updates = updateViewModel;
+        updates.PropertyChanged += OnUpdatesPropertyChanged;
+        OnPropertyChanged(nameof(Updates));
+        OnPropertyChanged(nameof(IsUpdateBannerVisible));
+    }
+
+    private void OnUpdatesPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(UpdateViewModel.IsBannerVisible) or nameof(UpdateViewModel.State))
+        {
+            OnPropertyChanged(nameof(IsUpdateBannerVisible));
+        }
     }
 
     private static async Task LoadFeaturePagesSafelyAsync(

@@ -71,6 +71,27 @@ public sealed class HttpUpdateManifestSourceTests
         Assert.Equal("UPDATE_MANIFEST_INVALID", result.Problem?.Code);
     }
 
+    [Fact]
+    public async Task FetchAsyncAcceptsExplicitTestChannel()
+    {
+        const string json = "{\"schemaVersion\":1,\"keyId\":\"test-key\",\"channel\":\"test\",\"version\":\"1.2.0\",\"publishedUtc\":\"2026-08-14T12:00:00Z\",\"minimumLauncherVersion\":\"1.0.0\",\"releaseNotes\":{\"en-US\":\"Notes\"},\"releaseNotesUrl\":\"https://updates.example.test/releases/1.2.0\",\"package\":{\"runtime\":\"win-x64\",\"url\":\"https://updates.example.test/packages/1.2.0.zip\",\"size\":128,\"sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"fileManifestSha256\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"}}";
+        HttpClient client = Client(new Dictionary<string, byte[]>(StringComparer.Ordinal)
+        {
+            ["https://updates.example.test/manifest.json"] = Encoding.UTF8.GetBytes(json),
+            ["https://updates.example.test/manifest.sig"] = [1],
+        });
+        HttpUpdateManifestSource source = new(
+            new HttpUpdateManifestSourceOptions(
+                new Uri("https://updates.example.test/manifest.json"),
+                new Uri("https://updates.example.test/manifest.sig")),
+            client);
+
+        var result = await source.FetchAsync(UpdateChannel.Test, TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.Equal(UpdateChannel.Test, result.Value.Manifest.Channel);
+    }
+
     private static HttpClient Client(IReadOnlyDictionary<string, byte[]> responses) => new(
         new StubHandler(responses));
 

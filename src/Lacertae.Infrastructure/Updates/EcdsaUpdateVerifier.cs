@@ -101,6 +101,7 @@ public sealed class EcdsaUpdateVerifier : IUpdateVerifier
             {
                 UpdateChannel.Stable => "stable",
                 UpdateChannel.Preview => "preview",
+                UpdateChannel.Test => "test",
                 UpdateChannel.Nightly => "nightly",
                 _ => throw new InvalidOperationException("Unknown update channel."),
             }),

@@ -26,7 +26,7 @@
     },
     "channel": {
       "type": "string",
-      "enum": ["stable", "preview", "nightly"]
+      "enum": ["stable", "preview", "test", "nightly"]
     },
     "version": {
       "type": "string",

@@ -4,5 +4,6 @@ public enum UpdateChannel
 {
     Stable,
     Preview,
+    Test,
     Nightly,
 }
