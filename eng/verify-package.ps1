@@ -13,10 +13,14 @@ if (-not (Test-Path -LiteralPath $root -PathType Container)) {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $license = Join-Path $repoRoot 'LICENSE'
 if (-not (Test-Path -LiteralPath $license -PathType Leaf)) {
-    throw 'OWNER_LICENSE_REQUIRED: add the owner-approved LICENSE before publishing.'
+    throw 'PROJECT_LICENSE_REQUIRED: add the approved root LICENSE before publishing.'
+}
+$licenseText = Get-Content -LiteralPath $license -Raw
+if ($licenseText -notmatch 'Apache License\s+Version 2\.0') {
+    throw 'PROJECT_LICENSE_INVALID: the root LICENSE must be Apache-2.0.'
 }
 
-$required = @('Lacertae.Desktop.exe', 'Updater/Lacertae.Updater.exe', 'package-manifest.json', 'THIRD-PARTY-NOTICES.txt', 'sbom.cdx.json')
+$required = @('Lacertae.Desktop.exe', 'Updater/Lacertae.Updater.exe', 'package-manifest.json', 'LICENSE', 'THIRD-PARTY-NOTICES.txt', 'sbom.cdx.json')
 foreach ($relative in $required) {
     $path = Join-Path $root ($relative.Replace('/', [IO.Path]::DirectorySeparatorChar))
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "PACKAGE_REQUIRED_FILE_MISSING: $relative" }

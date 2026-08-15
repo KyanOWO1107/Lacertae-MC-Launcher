@@ -25,7 +25,11 @@ New-Item -ItemType Directory -Force -Path $packageRoot, $appPublish, $updaterPub
 
 $license = Join-Path $repoRoot 'LICENSE'
 if (-not (Test-Path -LiteralPath $license -PathType Leaf)) {
-    throw 'OWNER_LICENSE_REQUIRED: add the owner-approved LICENSE before publishing.'
+    throw 'PROJECT_LICENSE_REQUIRED: add the approved root LICENSE before publishing.'
+}
+$licenseText = Get-Content -LiteralPath $license -Raw
+if ($licenseText -notmatch 'Apache License\s+Version 2\.0') {
+    throw 'PROJECT_LICENSE_INVALID: the root LICENSE must be Apache-2.0.'
 }
 
 Push-Location $repoRoot
@@ -43,6 +47,9 @@ Copy-Item -Path (Join-Path $appPublish '*') -Destination $packageRoot -Recurse -
 $updaterRoot = Join-Path $packageRoot 'Updater'
 New-Item -ItemType Directory -Force -Path $updaterRoot | Out-Null
 Copy-Item -Path (Join-Path $updaterPublish '*') -Destination $updaterRoot -Recurse -Force
+# Some native/UI dependencies publish their own symbols even when the application
+# uses DebugType=None. Symbols are not needed at runtime and must not enter release ZIPs.
+Get-ChildItem -LiteralPath $packageRoot -File -Recurse -Filter '*.pdb' | Remove-Item -Force
 Copy-Item -LiteralPath (Join-Path $repoRoot 'THIRD-PARTY-NOTICES.txt') -Destination (Join-Path $packageRoot 'THIRD-PARTY-NOTICES.txt') -Force
 Copy-Item -LiteralPath $license -Destination (Join-Path $packageRoot 'LICENSE') -Force
 
