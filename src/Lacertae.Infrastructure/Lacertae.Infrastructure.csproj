@@ -13,5 +13,8 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <PackageReference Include="CmlLib.Core" />
     <PackageReference Include="CmlLib.Core.Auth.Microsoft" />
+    <PackageReference Include="XboxAuthNet.Game.Msal" />
+    <PackageReference Include="Microsoft.Identity.Client" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" />
   </ItemGroup>
 </Project>

@@ -262,7 +262,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public void ApplyStartupState(
         StartupState startupState,
         IOnboardingUseCases? onboardingUseCases = null,
-        OnboardingDurableState? preflightState = null)
+        OnboardingDurableState? preflightState = null,
+        bool microsoftLoginConfigured = false,
+        string? microsoftConfigurationErrorCode = null)
     {
         ArgumentNullException.ThrowIfNull(startupState);
         hasStartupState = true;
@@ -280,7 +282,9 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
                 null,
                 false,
                 false,
-                false));
+                false),
+            microsoftLoginConfigured: microsoftLoginConfigured,
+            microsoftConfigurationErrorCode: microsoftConfigurationErrorCode);
         Onboarding.PropertyChanged += OnboardingPropertyChanged;
         IsOnboardingVisible = preflightState?.CanFormLaunchPreflight != true;
         OnPropertyChanged(nameof(HasStartupState));

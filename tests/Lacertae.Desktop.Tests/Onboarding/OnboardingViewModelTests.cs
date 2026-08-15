@@ -27,6 +27,32 @@ public sealed class OnboardingViewModelTests
     }
 
     [Fact]
+    public void MissingMicrosoftConfigurationDisablesOnlyTheMicrosoftPath()
+    {
+        OnboardingViewModel viewModel = new(
+            new FakeOnboardingUseCases(),
+            new OnboardingDataRootSnapshot(DataRootMode.UserProfile, "用户目录"),
+            microsoftLoginConfigured: false);
+
+        Assert.False(viewModel.IsMicrosoftLoginConfigured);
+        Assert.Contains("未配置", viewModel.MicrosoftLoginStatus, StringComparison.Ordinal);
+        Assert.False(viewModel.RequiresMicrosoftConfiguration);
+    }
+
+    [Fact]
+    public void InvalidMicrosoftConfigurationIsReportedWithoutExposingConfigurationValues()
+    {
+        OnboardingViewModel viewModel = new(
+            new FakeOnboardingUseCases(),
+            new OnboardingDataRootSnapshot(DataRootMode.UserProfile, "用户目录"),
+            microsoftLoginConfigured: false,
+            microsoftConfigurationErrorCode: "AUTH_MICROSOFT_CONFIG_INVALID");
+
+        Assert.Contains("AUTH_MICROSOFT_CONFIG_INVALID", viewModel.MicrosoftLoginStatus, StringComparison.Ordinal);
+        Assert.DoesNotContain("client", viewModel.MicrosoftLoginStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task EmptyRootAndOfflineAccountCanCompleteWithoutMicrosoftSetup()
     {
         FakeOnboardingUseCases useCases = new();

@@ -17,6 +17,7 @@ using Lacertae.Application.Startup;
 using Lacertae.Application.Storage;
 using Lacertae.Application.SystemInfo;
 using Lacertae.Application.Versions;
+using Lacertae.Desktop.Configuration;
 using Lacertae.Desktop.Services;
 using Lacertae.Desktop.ViewModels;
 using Lacertae.Desktop.ViewModels.Downloads;
@@ -80,6 +81,8 @@ public sealed class CompositionRoot : IDisposable
         registrations.AddSingleton<IStartupLoggingInitializer, FileLoggingInitializer>();
         registrations.AddSingleton<IStartupStorageFactory, DurableStartupStorageFactory>();
         registrations.AddSingleton<IPlatformDialogService, WindowsPlatformDialogService>();
+        registrations.AddSingleton<OAuthClientRegistrationLoader>(_ =>
+            new OAuthClientRegistrationLoader(AppContext.BaseDirectory));
         registrations.AddSingleton<IJavaProbe>(_ => new JavaProbe(new SystemProcessRunner()));
         registrations.AddSingleton<IHomeLaunchPlanHost, DefaultHomeLaunchPlanHost>();
         registrations.AddSingleton<IBackgroundTaskStore>(provider =>
@@ -115,10 +118,17 @@ public sealed class CompositionRoot : IDisposable
                 services.GetRequiredService<IFileSystem>());
             OnboardingDurableState preflightState =
                 await onboardingUseCases.ValidateStartupPreflightAsync(cancellationToken);
+            Result<OAuthClientRegistration?> microsoftRegistration = services
+                .GetRequiredService<OAuthClientRegistrationLoader>()
+                .Load();
             services.GetRequiredService<MainWindowViewModel>().ApplyStartupState(
                 result.Value,
                 onboardingUseCases,
-                preflightState);
+                preflightState,
+                microsoftLoginConfigured: microsoftRegistration.IsSuccess && microsoftRegistration.Value is not null,
+                microsoftConfigurationErrorCode: microsoftRegistration.IsSuccess
+                    ? null
+                    : microsoftRegistration.Problem?.Code);
             await ConfigureFeaturePagesAsync(result.Value, cancellationToken);
             await TryApplyHomeStateAsync(result.Value, cancellationToken);
         }

@@ -64,6 +64,9 @@
           <TextBlock Foreground="{DynamicResource TextSecondaryBrush}"
                      Text="可以直接创建离线账号，不需要 Microsoft 配置。"
                      TextWrapping="Wrap" />
+          <TextBlock Foreground="{DynamicResource TextMutedBrush}"
+                     Text="{Binding MicrosoftLoginStatus}"
+                     TextWrapping="Wrap" />
           <Button HorizontalAlignment="Left"
                   Content="添加离线账号"
                   Command="{Binding AddOfflineAccountCommand}" />

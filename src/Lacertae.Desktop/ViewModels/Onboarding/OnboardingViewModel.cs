@@ -105,6 +105,8 @@ public sealed class OnboardingViewModel : INotifyPropertyChanged
     private string? javaPathDraft;
     private bool isOpen = true;
     private readonly bool requiresMicrosoftConfiguration;
+    private readonly bool microsoftLoginConfigured;
+    private readonly string? microsoftConfigurationErrorCode;
 
     public OnboardingViewModel()
         : this(new DisabledOnboardingUseCases(), new OnboardingDataRootSnapshot(DataRootMode.UserProfile, "Windows 用户数据目录"))
@@ -114,11 +116,17 @@ public sealed class OnboardingViewModel : INotifyPropertyChanged
     public OnboardingViewModel(
         IOnboardingUseCases useCases,
         OnboardingDataRootSnapshot dataRoot,
-        OnboardingDurableState? initialState = null)
+        OnboardingDurableState? initialState = null,
+        bool microsoftLoginConfigured = false,
+        string? microsoftConfigurationErrorCode = null)
     {
         this.useCases = useCases ?? throw new ArgumentNullException(nameof(useCases));
         this.dataRoot = dataRoot ?? throw new ArgumentNullException(nameof(dataRoot));
         requiresMicrosoftConfiguration = false;
+        this.microsoftLoginConfigured = microsoftLoginConfigured;
+        this.microsoftConfigurationErrorCode = string.IsNullOrWhiteSpace(microsoftConfigurationErrorCode)
+            ? null
+            : microsoftConfigurationErrorCode;
         durableState = initialState ?? durableState;
         AddGameRootCommand = new AsyncCommand(AddGameRootFromDraftAsync, () => !string.IsNullOrWhiteSpace(GameRootPathDraft));
         AddOfflineAccountCommand = new AsyncCommand(AddOfflineAccountFromDraftAsync, () => !string.IsNullOrWhiteSpace(OfflinePlayerNameDraft));
@@ -164,6 +172,14 @@ public sealed class OnboardingViewModel : INotifyPropertyChanged
     public bool IsDeferredSetup => durableState.IsDeferredSetup;
 
     public bool RequiresMicrosoftConfiguration => requiresMicrosoftConfiguration;
+
+    public bool IsMicrosoftLoginConfigured => microsoftLoginConfigured;
+
+    public string MicrosoftLoginStatus => microsoftConfigurationErrorCode is not null
+        ? $"Microsoft 登录配置无效（{microsoftConfigurationErrorCode}）；离线账号不受影响。"
+        : microsoftLoginConfigured
+            ? "Microsoft 登录已配置，可在账号页使用。"
+            : "此构建未配置 Microsoft 登录；离线账号不受影响。";
 
     public bool IsOpen
     {
