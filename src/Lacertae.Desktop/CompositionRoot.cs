@@ -54,6 +54,7 @@ using Lacertae.Infrastructure.Startup;
 using Lacertae.Infrastructure.Storage;
 using Lacertae.Infrastructure.Versions;
 using Lacertae.Platform.Windows.Accessibility;
+using Lacertae.Platform.Windows.Accounts;
 using Lacertae.Platform.Windows.Dialogs;
 using Lacertae.Platform.Windows.Java;
 using Lacertae.Platform.Windows.Storage;
@@ -79,7 +80,8 @@ public sealed class CompositionRoot : IDisposable
         registrations.AddSingleton<DataRootResolver>();
         registrations.AddSingleton<IStartupDataRootResolver>(provider => provider.GetRequiredService<DataRootResolver>());
         registrations.AddSingleton<IStartupLoggingInitializer, FileLoggingInitializer>();
-        registrations.AddSingleton<IStartupStorageFactory, DurableStartupStorageFactory>();
+        registrations.AddSingleton<IStartupStorageFactory>(_ =>
+            new DurableStartupStorageFactory(dataRoot => new DpapiSecretVault(dataRoot.SecretsPath)));
         registrations.AddSingleton<IPlatformDialogService, WindowsPlatformDialogService>();
         registrations.AddSingleton<OAuthClientRegistrationLoader>(_ =>
             new OAuthClientRegistrationLoader(AppContext.BaseDirectory));

@@ -22,7 +22,7 @@ public sealed class StartupCoordinatorTests
         var result = await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
 
         Assert.True(result.IsSuccess, result.Problem?.Code);
-        Assert.Equal(["resolve", "logging", "settings", "migrate", "recover", "install-recover", "roots"], events);
+        Assert.Equal(["resolve", "logging", "settings", "migrate", "recover", "account-recover", "install-recover", "roots"], events);
         Assert.Equal(DataRootMode.UserProfile, result.Value.DataRoot.Mode);
         Assert.Equal(LauncherSettings.Default, result.Value.Settings);
         Assert.Single(result.Value.GameRoots);
@@ -43,6 +43,23 @@ public sealed class StartupCoordinatorTests
         Assert.False(result.IsSuccess);
         Assert.Equal("TEST_MIGRATE_FAILED", result.Problem?.Code);
         Assert.Equal(["resolve", "logging", "settings", "migrate"], events);
+    }
+
+    [Fact]
+    public async Task InitializeAsyncRecoversAccountDeletionsBeforeInstallingRecovery()
+    {
+        List<string> events = [];
+        FakeStartupStorage storage = new(events) { FailureStep = "account-recover" };
+        StartupCoordinator coordinator = new(
+            new FakeDataRootResolver(events),
+            new FakeLoggingInitializer(events),
+            new FakeStorageFactory(storage));
+
+        var result = await coordinator.InitializeAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("TEST_ACCOUNT_RECOVER_FAILED", result.Problem?.Code);
+        Assert.Equal(["resolve", "logging", "settings", "migrate", "recover", "account-recover"], events);
     }
 
     [Fact]
@@ -121,6 +138,14 @@ public sealed class StartupCoordinatorTests
             events.Add("recover");
             return Task.FromResult(FailureStep == "recover"
                 ? Result.Failure(Problem("TEST_RECOVER_FAILED"))
+                : Result.Success());
+        }
+
+        public Task<Result<Unit>> RecoverAccountDeletionsAsync(CancellationToken cancellationToken)
+        {
+            events.Add("account-recover");
+            return Task.FromResult(FailureStep == "account-recover"
+                ? Result.Failure(Problem("TEST_ACCOUNT_RECOVER_FAILED"))
                 : Result.Success());
         }
 

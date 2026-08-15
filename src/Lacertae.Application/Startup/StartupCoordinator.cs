@@ -27,6 +27,7 @@ public interface IStartupStorage
     Task<Result<LauncherSettings>> LoadSettingsAsync(CancellationToken cancellationToken);
     Task<Result<Unit>> MigrateDatabaseAsync(CancellationToken cancellationToken);
     Task<Result<Unit>> RecoverVersionRenameAsync(CancellationToken cancellationToken);
+    Task<Result<Unit>> RecoverAccountDeletionsAsync(CancellationToken cancellationToken);
     Task<Result<Unit>> RecoverVanillaInstallsAsync(CancellationToken cancellationToken);
     Task<Result<IReadOnlyList<GameRoot>>> RefreshGameRootsAsync(CancellationToken cancellationToken);
 }
@@ -72,6 +73,12 @@ public sealed class StartupCoordinator(
         if (!recovered.IsSuccess)
         {
             return Result<StartupState>.Failure(recovered.Problem!);
+        }
+
+        Result<Unit> recoveredAccounts = await storage.RecoverAccountDeletionsAsync(cancellationToken);
+        if (!recoveredAccounts.IsSuccess)
+        {
+            return Result<StartupState>.Failure(recoveredAccounts.Problem!);
         }
 
         Result<Unit> recoveredInstalls = await storage.RecoverVanillaInstallsAsync(cancellationToken);
