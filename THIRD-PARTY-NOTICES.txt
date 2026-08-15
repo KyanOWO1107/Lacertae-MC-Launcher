@@ -1,0 +1,35 @@
+Lacertae Minecraft Launcher - third-party notices
+
+This file is a release-time notice inventory. The release workflow must
+reconcile it with the locked NuGet graph before publishing.
+
+Avalonia 12.1.1 — MIT
+https://github.com/AvaloniaUI/Avalonia
+
+CommunityToolkit.Mvvm 8.4.2 — MIT
+https://github.com/CommunityToolkit/dotnet
+
+Microsoft.Extensions.* 10.0.11 — MIT
+https://github.com/dotnet/runtime
+
+Microsoft.Data.Sqlite 10.0.11 — MIT
+https://github.com/dotnet/efcore
+
+Serilog 4.4.0 and Serilog.Extensions.* — Apache-2.0
+https://github.com/serilog/serilog
+
+CmlLib.Core 4.0.6 and CmlLib.Core.Auth.Microsoft 3.3.1 — MIT
+https://github.com/CmlLib/CmlLib.Core
+
+XboxAuthNet.Game.Msal and Microsoft.Identity.Client — MIT
+https://github.com/antonsmind/XboxAuthNet
+https://github.com/AzureAD/microsoft-authentication-library-for-dotnet
+
+SQLitePCLRaw — Apache-2.0 / MIT components as identified by the lock graph
+https://github.com/ericsink/SQLitePCL.raw
+
+xUnit v3 — Apache-2.0 (test-only, not shipped in the release package)
+https://github.com/xunit/xunit
+
+NetArchTest.Rules — MIT (test-only, not shipped in the release package)
+https://github.com/BenMorris/NetArchTest
