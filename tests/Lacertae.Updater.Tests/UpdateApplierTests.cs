@@ -57,15 +57,62 @@ public sealed class UpdateApplierTests
         Assert.True(Directory.Exists(root.UserDataDirectory));
     }
 
+    [Fact]
+    public async Task RejectsStagingAndBackupOutsideTheUpdateRoot()
+    {
+        using TestRoot root = new();
+        string outsideStaging = Path.Combine(root.Root, "staging-outside");
+        string outsideBackup = Path.Combine(root.Root, "backup-outside");
+        Directory.CreateDirectory(outsideStaging);
+        Directory.CreateDirectory(outsideBackup);
+
+        UpdateApplyPlan invalid = root.Plan with
+        {
+            StagingDirectory = outsideStaging,
+            BackupDirectory = outsideBackup,
+        };
+
+        UpdateApplyResult result = await TestRoot.CreateApplier(
+            new FakeProcessLauncher(root.HealthPath, root.Nonce, validHealth: true)).ApplyAsync(
+                invalid,
+                TestContext.Current.CancellationToken);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("UPDATE_PLAN_ROOT_INVALID", result.FailureCode);
+    }
+
+    [Fact]
+    public async Task BindsNewExecutableWhileStartingIt()
+    {
+        using TestRoot root = new();
+        await root.SeedAsync("old-launcher", "new-launcher", TestContext.Current.CancellationToken);
+        FakeProcessLauncher launcher = new(
+            root.HealthPath,
+            root.Nonce,
+            validHealth: true,
+            executableReplacementProbe: true);
+
+        UpdateApplyResult result = await TestRoot.CreateApplier(launcher).ApplyAsync(
+            root.Plan,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Succeeded, result.FailureCode);
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.True(launcher.ExecutableReplacementBlocked);
+            Assert.True(launcher.ExecutableWriteBlocked);
+        }
+    }
+
     private sealed class TestRoot : IDisposable
     {
         public TestRoot()
         {
             Root = Path.Combine(Path.GetTempPath(), "lacertae-updater-test-" + Guid.NewGuid().ToString("N"));
             InstallDirectory = Path.Combine(Root, "install");
-            StagingDirectory = Path.Combine(Root, "staging");
-            BackupDirectory = Path.Combine(Root, "backup");
             UpdatesDirectory = Path.Combine(Root, "updates");
+            StagingDirectory = Path.Combine(UpdatesDirectory, "staging");
+            BackupDirectory = Path.Combine(UpdatesDirectory, "backup");
             Directory.CreateDirectory(InstallDirectory);
             Directory.CreateDirectory(StagingDirectory);
             Directory.CreateDirectory(UpdatesDirectory);
@@ -156,10 +203,51 @@ public sealed class UpdateApplierTests
             Task.FromResult(ProcessWaitResult.Success());
     }
 
-    private sealed class FakeProcessLauncher(string healthPath, string nonce, bool validHealth) : IUpdateProcessLauncher
+    private sealed class FakeProcessLauncher(
+        string healthPath,
+        string nonce,
+        bool validHealth,
+        bool executableReplacementProbe = false) : IUpdateProcessLauncher
     {
+        public bool ExecutableReplacementBlocked { get; private set; }
+
+        public bool ExecutableWriteBlocked { get; private set; }
+
         public IUpdateProcess Start(string executablePath, string workingDirectory, IReadOnlyList<string> arguments)
         {
+            if (executableReplacementProbe)
+            {
+                string replacementPath = executablePath + ".replacement";
+                try
+                {
+                    File.Move(executablePath, replacementPath, overwrite: true);
+                }
+                catch (IOException)
+                {
+                    ExecutableReplacementBlocked = true;
+                }
+                finally
+                {
+                    if (File.Exists(replacementPath) && !File.Exists(executablePath))
+                    {
+                        File.Move(replacementPath, executablePath, overwrite: true);
+                    }
+                }
+
+                try
+                {
+                    using FileStream writer = new(executablePath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite);
+                }
+                catch (IOException)
+                {
+                    ExecutableWriteBlocked = true;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    ExecutableWriteBlocked = true;
+                }
+            }
+
             FakeProcess process = new();
             string writtenNonce = validHealth ? nonce : "wrong-nonce";
             File.WriteAllText(

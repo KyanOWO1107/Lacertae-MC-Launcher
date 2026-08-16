@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using Lacertae.Application.Storage;
 using Lacertae.Application.Updates;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Problems;
@@ -21,9 +22,9 @@ public sealed class SystemUpdaterProcessStarter : IUpdaterProcessStarter
             !Path.IsPathFullyQualified(workingDirectory) ||
             string.IsNullOrWhiteSpace(planPath) ||
             !Path.IsPathFullyQualified(planPath) ||
-            !File.Exists(updaterExecutablePath) ||
-            !Directory.Exists(workingDirectory) ||
-            !File.Exists(planPath))
+            !SecureFileSystem.IsSafeDirectory(workingDirectory) ||
+            !SecureFileSystem.IsSafeFile(updaterExecutablePath, workingDirectory) ||
+            !SecureFileSystem.IsSafeFile(planPath, Path.GetDirectoryName(planPath)!))
         {
             return Result<Unit>.Failure(Problem("UPDATE_UPDATER_START_INVALID", false));
         }
@@ -39,6 +40,11 @@ public sealed class SystemUpdaterProcessStarter : IUpdaterProcessStarter
         startInfo.ArgumentList.Add(planPath);
         try
         {
+            // Keep the executable and both parent chains bound to the objects
+            // that were validated until CreateProcess has consumed the paths.
+            using IDisposable updaterLease = SecureFileSystem.OpenDirectoryLease(workingDirectory);
+            using Stream executableLease = SecureFileSystem.OpenReadExclusive(updaterExecutablePath, workingDirectory);
+            using IDisposable planLease = SecureFileSystem.OpenDirectoryLease(Path.GetDirectoryName(planPath)!);
             using Process? process = Process.Start(startInfo);
             return process is null
                 ? Result<Unit>.Failure(Problem("UPDATE_UPDATER_START_FAILED", true))

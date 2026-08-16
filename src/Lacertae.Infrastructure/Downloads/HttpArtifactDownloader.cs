@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Lacertae.Application.Downloads;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
@@ -84,15 +85,32 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
                 return Result<DownloadReceipt>.Failure(Problem("DOWNLOAD_PATH_INVALID", request.CorrelationId, request.Artifact));
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-            if (HasReparsePointBetween(finalPath, stagingRoot))
+            SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(finalPath)!, stagingRoot);
+            if (!SecureFileSystem.IsSafeDirectory(Path.GetDirectoryName(finalPath)!, stagingRoot))
             {
                 return Result<DownloadReceipt>.Failure(Problem("DOWNLOAD_PATH_INVALID", request.CorrelationId, request.Artifact));
             }
+
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or IOException or UnauthorizedAccessException)
         {
             return Result<DownloadReceipt>.Failure(Problem("DOWNLOAD_PATH_INVALID", request.CorrelationId, request.Artifact));
+        }
+
+        using IDisposable stagingLease = SecureFileSystem.OpenDirectoryLease(stagingRoot);
+        if (File.Exists(finalPath))
+        {
+            if (await VerifyFileAsync(finalPath, request.Artifact, cancellationToken))
+            {
+                return Result<DownloadReceipt>.Success(new DownloadReceipt(
+                    finalPath,
+                    new DownloadSourceId("local"),
+                    0,
+                    WasResumed: false,
+                    PreferredHash(request.Artifact)));
+            }
+
+            Quarantine(finalPath, stagingRoot, new DownloadSourceId("local"), request.Artifact, "existing-file-mismatch", 0);
         }
 
         if (cache is not null)
@@ -116,21 +134,6 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
                     return cachedResult;
                 }
             }
-        }
-
-        if (File.Exists(finalPath))
-        {
-            if (await VerifyFileAsync(finalPath, request.Artifact, cancellationToken))
-            {
-                return Result<DownloadReceipt>.Success(new DownloadReceipt(
-                    finalPath,
-                    new DownloadSourceId("local"),
-                    0,
-                    WasResumed: false,
-                    PreferredHash(request.Artifact)));
-            }
-
-            Quarantine(finalPath, stagingRoot, new DownloadSourceId("local"), request.Artifact, "existing-file-mismatch", 0);
         }
 
         Result<IReadOnlyList<DownloadCandidate>> candidates = sourceSelector.Select(
@@ -462,16 +465,13 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
             {
                 if (start > 0)
                 {
-                    await hashes.AppendFilePrefixAsync(partPath, start, cancellationToken);
+                    await hashes.AppendFilePrefixAsync(partPath, start, cancellationToken, stagingRoot);
                 }
 
-                await using FileStream part = new(
+                await using Stream part = SecureFileSystem.OpenWrite(
                     partPath,
                     resumed ? FileMode.OpenOrCreate : FileMode.Create,
-                    FileAccess.ReadWrite,
-                    FileShare.Read,
-                    BufferSize,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    stagingRoot);
                 if (resumed)
                 {
                     part.Position = start;
@@ -542,7 +542,7 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
                     }
 
                     await part.FlushAsync(cancellationToken);
-                    part.Flush(true);
+                    part.Flush();
                     if (total != request.Artifact.ExpectedSize || !hashes.Matches(request.Artifact))
                     {
                         throw new HashMismatchException(total < request.Artifact.ExpectedSize ? "too-few-bytes" : "hash-mismatch", total);
@@ -551,7 +551,7 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
                     // Windows keeps an open FileStream as an exclusive handle even
                     // after Flush. Release it before the atomic promotion below.
                     await part.DisposeAsync();
-                    File.Move(partPath, finalPath, true);
+                    SecureFileSystem.MoveReplace(partPath, finalPath, stagingRoot);
                     TryDeleteFile(metadataPath);
                     return AttemptResult.Success(new DownloadReceipt(
                         finalPath,
@@ -621,7 +621,9 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
                 throw new RedirectRejectedException();
             }
 
-            if (!next.IsAbsoluteUri || next.Scheme != Uri.UriSchemeHttps || next.UserInfo.Length > 0 || next.Fragment.Length > 0 ||
+            if (!next.IsAbsoluteUri || next.Scheme != Uri.UriSchemeHttps ||
+                !string.Equals(next.Host, current.Host, StringComparison.OrdinalIgnoreCase) || next.Port != current.Port ||
+                next.UserInfo.Length > 0 || next.Fragment.Length > 0 ||
                 !visited.Add(next.AbsoluteUri))
             {
                 response.Dispose();
@@ -685,8 +687,11 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
 
         try
         {
-            PartMetadata? metadata = JsonSerializer.Deserialize<PartMetadata>(File.ReadAllText(metadataPath), PartMetadataJsonOptions);
-            long bytesPresent = new FileInfo(partPath).Length;
+            using Stream metadataStream = SecureFileSystem.OpenRead(metadataPath, Path.GetDirectoryName(metadataPath));
+            using StreamReader metadataReader = new(metadataStream);
+            PartMetadata? metadata = JsonSerializer.Deserialize<PartMetadata>(metadataReader.ReadToEnd(), PartMetadataJsonOptions);
+            using Stream partStream = SecureFileSystem.OpenRead(partPath, Path.GetDirectoryName(partPath));
+            long bytesPresent = partStream.Length;
             if (metadata is null || !string.Equals(metadata.SourceId, candidate.SourceId.Value, StringComparison.Ordinal) ||
                 metadata.ExpectedSize != artifact.ExpectedSize || metadata.BytesPresent != bytesPresent ||
                 bytesPresent <= 0 || bytesPresent >= artifact.ExpectedSize || !IsStrongEtag(metadata.Etag))
@@ -711,22 +716,8 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
 
     private static async Task WriteMetadataAsync(string path, PartMetadata metadata, CancellationToken cancellationToken)
     {
-        string temporaryPath = path + ".tmp";
-        try
-        {
-            await using (FileStream stream = new(temporaryPath, FileMode.Create, FileAccess.Write, FileShare.None))
-            {
-                await JsonSerializer.SerializeAsync(stream, metadata, PartMetadataJsonOptions, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
-                stream.Flush(true);
-            }
-
-            File.Move(temporaryPath, path, true);
-        }
-        finally
-        {
-            TryDeleteFile(temporaryPath);
-        }
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(metadata, PartMetadataJsonOptions);
+        await SecureFileSystem.WriteAtomicallyAsync(path, bytes, cancellationToken);
     }
 
     private static void ResetPartial(string partPath, string metadataPath)
@@ -749,18 +740,19 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
         }
 
         string quarantineDirectory = Path.Combine(stagingRoot, ".quarantine");
-        Directory.CreateDirectory(quarantineDirectory);
+        SecureFileSystem.EnsureDirectory(quarantineDirectory, stagingRoot);
         string badPath = Path.Combine(quarantineDirectory, artifact.ArtifactId + "." + Guid.NewGuid().ToString("N") + ".bad");
-        File.Move(path, badPath, true);
+        SecureFileSystem.MoveReplace(path, badPath, stagingRoot);
         string metadataPath = badPath + ".json";
-        File.WriteAllText(metadataPath, JsonSerializer.Serialize(new
+        byte[] metadataBytes = JsonSerializer.SerializeToUtf8Bytes(new
         {
             sourceId = sourceId.Value,
             artifactId = artifact.ArtifactId,
             reason,
             expectedSize = artifact.ExpectedSize,
             actualBytes,
-        }, PartMetadataJsonOptions));
+        }, PartMetadataJsonOptions);
+        SecureFileSystem.WriteAtomicallyAsync(metadataPath, metadataBytes, CancellationToken.None).GetAwaiter().GetResult();
         TryDeleteFile(path + ".meta.json");
     }
 
@@ -773,11 +765,11 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
     {
         try
         {
-            await using FileStream source = new(cachedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            await using FileStream target = new(finalPath, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, FileOptions.Asynchronous);
+            await using Stream source = SecureFileSystem.OpenRead(cachedPath, Path.GetDirectoryName(cachedPath));
+            await using Stream target = SecureFileSystem.OpenWrite(finalPath, FileMode.Create, Path.GetDirectoryName(finalPath));
             await source.CopyToAsync(target, BufferSize, cancellationToken);
             await target.FlushAsync(cancellationToken);
-            target.Flush(true);
+            target.Flush();
             if (!await VerifyFileAsync(finalPath, request.Artifact, cancellationToken))
             {
                 TryDeleteFile(finalPath);
@@ -809,15 +801,10 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
         DownloadArtifact artifact,
         CancellationToken cancellationToken)
     {
-        if (!File.Exists(path) || new FileInfo(path).Length != artifact.ExpectedSize)
-        {
-            return false;
-        }
-
         HashAccumulator hashes = new(artifact.Hashes);
         try
         {
-            await hashes.AppendFilePrefixAsync(path, artifact.ExpectedSize, cancellationToken);
+            await hashes.AppendFilePrefixAsync(path, artifact.ExpectedSize, cancellationToken, Path.GetDirectoryName(path));
             return hashes.Matches(artifact);
         }
         catch (IOException)
@@ -880,44 +867,13 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
         return fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool HasReparsePointBetween(string path, string root)
-    {
-        string normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        FileSystemInfo? current = File.Exists(path)
-            ? new FileInfo(path)
-            : Directory.Exists(path)
-                ? new DirectoryInfo(path)
-                : new DirectoryInfo(Path.GetDirectoryName(path)!);
-        while (current is not null)
-        {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return true;
-            }
-
-            if (string.Equals(Path.TrimEndingDirectorySeparator(current.FullName), normalizedRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            current = current switch
-            {
-                FileInfo file => file.Directory,
-                DirectoryInfo directory => directory.Parent,
-                _ => null,
-            };
-        }
-
-        return true;
-    }
-
     private static void TryDeleteFile(string path)
     {
         try
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                SecureFileSystem.DeleteFile(path, Path.GetDirectoryName(path));
             }
         }
         catch (IOException)
@@ -1028,9 +984,13 @@ public sealed class HttpArtifactDownloader : IArtifactDownloader
             }
         }
 
-        public async Task AppendFilePrefixAsync(string path, long length, CancellationToken cancellationToken)
+        public async Task AppendFilePrefixAsync(
+            string path,
+            long length,
+            CancellationToken cancellationToken,
+            string? allowedRoot = null)
         {
-            await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, FileOptions.Asynchronous);
+            await using Stream stream = SecureFileSystem.OpenRead(path, allowedRoot);
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
             try
             {

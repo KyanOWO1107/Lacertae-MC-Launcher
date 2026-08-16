@@ -1,3 +1,4 @@
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Install;
@@ -69,6 +70,7 @@ public sealed class RecoverVanillaInstalls(
         IProgress<OperationProgress> progress,
         CancellationToken cancellationToken)
     {
+        using IDisposable rootLease = SecureFileSystem.OpenDirectoryLease(root);
         Dictionary<string, DownloadArtifact> artifacts = record.Plan.Artifacts.ToDictionary(
             static artifact => artifact.RelativeDestinationPath,
             StringComparer.OrdinalIgnoreCase);
@@ -125,10 +127,10 @@ public sealed class RecoverVanillaInstalls(
                     return Result<Unit>.Failure(Problem("INSTALL_RECOVERY_CONFLICT"));
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(finalPath)!, root);
                 try
                 {
-                    File.Move(stagedPath, finalPath);
+                    SecureFileSystem.MoveCreate(stagedPath, finalPath, root);
                 }
                 catch (IOException)
                 {
@@ -156,10 +158,10 @@ public sealed class RecoverVanillaInstalls(
                     return Result<Unit>.Failure(Problem("INSTALL_RECOVERY_CONFLICT"));
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
+                SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(finalPath)!, root);
                 try
                 {
-                    File.Move(quarantinePath, finalPath);
+                    SecureFileSystem.MoveCreate(quarantinePath, finalPath, root);
                 }
                 catch (IOException)
                 {
@@ -281,7 +283,7 @@ public sealed class RecoverVanillaInstalls(
         {
             if (Directory.Exists(path))
             {
-                Directory.Delete(path, recursive: true);
+                SecureFileSystem.DeleteDirectory(path);
             }
         }
         catch (IOException)
@@ -298,7 +300,7 @@ public sealed class RecoverVanillaInstalls(
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                SecureFileSystem.DeleteFile(path);
             }
         }
         catch (IOException)

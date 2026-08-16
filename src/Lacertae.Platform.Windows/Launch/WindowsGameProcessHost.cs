@@ -5,6 +5,7 @@ using System.Text;
 using Lacertae.Application.Diagnostics;
 using Lacertae.Application.Games;
 using Lacertae.Application.Launch;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Launch;
 using Lacertae.Domain.Problems;
@@ -40,11 +41,19 @@ public sealed class WindowsGameProcessHost : IGameProcessHost
         ArgumentNullException.ThrowIfNull(log);
         waitCancellationToken.ThrowIfCancellationRequested();
 
+        string executablePath = Path.GetFullPath(spec.FileName);
+        string workingDirectory = Path.GetFullPath(spec.WorkingDirectory);
+        if (!SecureFileSystem.IsSafeDirectory(workingDirectory) ||
+            !SecureFileSystem.IsSafeFile(executablePath, Path.GetDirectoryName(executablePath)!))
+        {
+            return Result<GameExitResult>.Failure(StartProblem(spec));
+        }
+
         DateTimeOffset startedUtc = timeProvider.GetUtcNow();
         ProcessStartInfo startInfo = new()
         {
-            FileName = spec.FileName,
-            WorkingDirectory = spec.WorkingDirectory,
+            FileName = executablePath,
+            WorkingDirectory = workingDirectory,
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -72,6 +81,9 @@ public sealed class WindowsGameProcessHost : IGameProcessHost
         int processId;
         try
         {
+            using IDisposable executableParentLease = SecureFileSystem.OpenDirectoryLease(Path.GetDirectoryName(executablePath)!);
+            using Stream executableLease = SecureFileSystem.OpenReadExclusive(executablePath, Path.GetDirectoryName(executablePath)!);
+            using IDisposable workingDirectoryLease = SecureFileSystem.OpenDirectoryLease(workingDirectory);
             if (!process.Start())
             {
                 process.Dispose();
