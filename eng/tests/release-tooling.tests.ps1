@@ -152,10 +152,35 @@ try {
     Assert-True ($publishScript -match 'Assert-LockBaselines') 'Publish must compare the temporary lock graph with the repository baseline.'
     Assert-True ($publishScript -match 'ZipArchive') 'Publish must use the deterministic ZipArchive path.'
     Assert-True ($publishScript -match 'SOURCE_DATE_EPOCH_REQUIRED') 'Publish must require a deterministic timestamp.'
+    Assert-True ($publishScript -match 'PUBLISH_VERSION_INVALID') 'Publish must reject versions outside the strict SemVer boundary.'
+
+    $previousSourceDateEpoch = $env:SOURCE_DATE_EPOCH
+    try {
+        $env:SOURCE_DATE_EPOCH = '0'
+        Assert-FailsWith {
+            & (Join-Path $repoRoot 'eng/publish.ps1') `
+                -Runtime win-x64 `
+                -Version "0.1.0'; Write-Output INJECTED; #" `
+                -OutputDirectory $repoRoot
+        } 'PUBLISH_VERSION_INVALID'
+        Assert-FailsWith {
+            & (Join-Path $repoRoot 'eng/publish.ps1') `
+                -Runtime win-x64 `
+                -Version '0.1.0-test' `
+                -OutputDirectory $repoRoot
+        } 'OUTPUT_DIRECTORY_TOO_BROAD'
+    }
+    finally {
+        $env:SOURCE_DATE_EPOCH = $previousSourceDateEpoch
+    }
+
     $workflow = Get-Content -LiteralPath (Join-Path $repoRoot '.github/workflows/release-candidate.yml') -Raw
     Assert-True ($workflow -match 'source_date_epoch') 'Release workflow must provide SOURCE_DATE_EPOCH.'
+    Assert-True ($workflow -match 'VERSION_INPUT:\s*\$\{\{\s*inputs\.version\s*\}\}') 'Release workflow must pass the version through an environment variable.'
+    Assert-True ($workflow -match '-Version\s+\$env:VERSION_INPUT') 'Release workflow must read the version from the environment.'
+    Assert-True ($workflow -notmatch "-Version\s+'\$\{\{\s*inputs\.version") 'Release workflow must not interpolate the dispatch version inside a PowerShell command.'
 
-    Write-Output 'release tooling tests: RED checks passed'
+    Write-Output 'release tooling tests: passed'
 }
 finally {
     if (Test-Path -LiteralPath $testRoot) {

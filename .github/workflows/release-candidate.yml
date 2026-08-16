@@ -30,7 +30,8 @@ jobs:
         shell: pwsh
         env:
           SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
-        run: ./eng/publish.ps1 -Runtime win-x64 -Version '${{ inputs.version }}' -OutputDirectory artifacts/release-candidate
+          VERSION_INPUT: ${{ inputs.version }}
+        run: ./eng/publish.ps1 -Runtime win-x64 -Version $env:VERSION_INPUT -OutputDirectory artifacts/release-candidate
       - name: Verify candidate package
         shell: pwsh
         run: ./eng/verify-package.ps1 -PackageDirectory artifacts/release-candidate/package

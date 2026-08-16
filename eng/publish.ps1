@@ -8,6 +8,15 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# The workflow supplies this value from an untrusted dispatch input. Keep the
+# accepted form narrow because the value is also used in MSBuild properties
+# and the output ZIP name.
+$semVerPattern = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$'
+if ([string]::IsNullOrWhiteSpace($Version) -or $Version -notmatch $semVerPattern) {
+    throw 'PUBLISH_VERSION_INVALID: Version must be a strict SemVer 2.0 value.'
+}
+
 $releaseEpoch = 0L
 if ([string]::IsNullOrWhiteSpace($env:SOURCE_DATE_EPOCH) -or -not [long]::TryParse($env:SOURCE_DATE_EPOCH, [Globalization.NumberStyles]::Integer, [Globalization.CultureInfo]::InvariantCulture, [ref]$releaseEpoch) -or $releaseEpoch -lt 0) {
     throw 'SOURCE_DATE_EPOCH_REQUIRED: set a non-negative Unix timestamp for reproducible release output.'
