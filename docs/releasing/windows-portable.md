@@ -11,7 +11,17 @@
 ./eng/verify-package.ps1 -PackageDirectory artifacts/release-candidate/package
 ```
 
-脚本固定使用 `Release`、`win-x64`、self-contained 和非单文件输出，Updater 放在 `Updater/` 子目录。包内 `package-manifest.json` 按相对路径排序并记录大小/SHA-256；`sbom.cdx.json` 和第三方声明随包发布。
+脚本固定使用 `Release`、`win-x64`、self-contained 和非单文件输出，Updater 放在 `Updater/` 子目录。发布过程会复制 `src/` 与锁文件到输出目录下的临时源码副本，在副本中生成 win-x64 资产并检查基础 `net10.0` 锁图未漂移；仓库源码和锁文件不会被发布过程改写。临时源码只用于构建，成功后会被清理。
+
+包内 `package-manifest.json` 按相对路径排序并记录大小/SHA-256；`sbom.cdx.json` 和第三方声明随包发布。
+
+SBOM 和 `THIRD-PARTY-NOTICES.txt` 从 `src/**/packages.lock.json` 及本机 NuGet 缓存中的 `.nuspec` 生成，仅纳入生产依赖（`Project` 和测试项目依赖不会进入包）。发布必须设置非负 Unix 秒数，作为 SBOM 时间和 ZIP 条目时间：
+
+```powershell
+$env:SOURCE_DATE_EPOCH = '1700000000'
+```
+
+验证脚本会检查两个 x64 PE 入口、根许可证、清单完整性、CycloneDX SBOM、每个 SBOM 组件在 notices 中的明确 `Package:`/`Version:` 标记，以及调试/用户数据/测试输出和密钥模式均未进入包。
 
 `publish.ps1` 和 `verify-package.ps1` 要求仓库根目录存在已批准的 Apache-2.0 `LICENSE`，并将其复制到发布包。此门槛不能通过环境变量、测试参数或自动生成的许可证绕过。
 

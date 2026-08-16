@@ -7,6 +7,10 @@ on:
         description: Unsigned candidate version
         required: true
         type: string
+      source_date_epoch:
+        description: Non-negative Unix timestamp used for deterministic SBOM and ZIP timestamps
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,6 +28,8 @@ jobs:
           cache-dependency-path: '**/packages.lock.json'
       - name: Build unsigned portable candidate
         shell: pwsh
+        env:
+          SOURCE_DATE_EPOCH: ${{ inputs.source_date_epoch }}
         run: ./eng/publish.ps1 -Runtime win-x64 -Version '${{ inputs.version }}' -OutputDirectory artifacts/release-candidate
       - name: Verify candidate package
         shell: pwsh

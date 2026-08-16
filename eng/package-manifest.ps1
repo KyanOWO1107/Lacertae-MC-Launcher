@@ -18,21 +18,29 @@ $manifestPath = [IO.Path]::GetFullPath($OutputPath)
 $manifestDirectory = Split-Path -Parent $manifestPath
 New-Item -ItemType Directory -Force -Path $manifestDirectory | Out-Null
 
-$files = @(
-    Get-ChildItem -LiteralPath $packageRoot -File -Recurse |
-        Where-Object { $_.FullName -ne $manifestPath } |
-        ForEach-Object {
-            $relative = [IO.Path]::GetRelativePath($packageRoot, $_.FullName).Replace([IO.Path]::DirectorySeparatorChar, '/')
-            if ($relative.Contains('..')) { throw "Package file escaped root: $relative" }
-            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            [pscustomobject]@{
-                path = $relative
-                size = [int64]$_.Length
-                sha256 = $hash
-            }
-        } |
-        Sort-Object -Property path
-)
+$files = [System.Collections.Generic.List[object]]::new()
+foreach ($file in (Get-ChildItem -LiteralPath $packageRoot -File -Recurse)) {
+    if ($file.FullName -eq $manifestPath) {
+        continue
+    }
+
+    $relative = [IO.Path]::GetRelativePath($packageRoot, $file.FullName).Replace('\', '/')
+    if ($relative -eq '..' -or $relative.StartsWith('../', [StringComparison]::Ordinal)) {
+        throw "Package file escaped root: $relative"
+    }
+    $hash = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    [void]$files.Add([pscustomobject]@{
+            path = $relative
+            size = [int64]$file.Length
+            sha256 = $hash
+        })
+}
+
+$files.Sort([System.Comparison[object]]{
+        param($left, $right)
+
+        [StringComparer]::Ordinal.Compare([string]$left.path, [string]$right.path)
+    })
 
 $document = [ordered]@{
     schemaVersion = 1
