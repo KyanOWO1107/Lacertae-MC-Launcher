@@ -66,6 +66,9 @@ $files = @(Get-ChildItem -LiteralPath $root -File -Recurse)
 $directories = @(Get-ChildItem -LiteralPath $root -Directory -Recurse)
 foreach ($entry in @($files + $directories)) {
     $relative = Get-RelativePath $entry.FullName
+    if ($entry.Name -match '^(?i:oauth\.local\.json|\.entra-id(?:\..*)?)$') {
+        throw "PACKAGE_FORBIDDEN_PATH: $relative"
+    }
     foreach ($forbidden in $forbiddenNames) {
         if ($relative -eq $forbidden -or $relative.StartsWith("$forbidden/", [StringComparison]::OrdinalIgnoreCase) -or $entry.Name -eq $forbidden) {
             throw "PACKAGE_FORBIDDEN_PATH: $relative"

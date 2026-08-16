@@ -21,3 +21,8 @@ jobs:
       - name: Verify
         shell: pwsh
         run: ./eng/verify.ps1
+      - name: Verify local configuration and release tooling
+        shell: pwsh
+        run: |
+          ./eng/tests/entra-registration.tests.ps1
+          ./eng/tests/release-tooling.tests.ps1

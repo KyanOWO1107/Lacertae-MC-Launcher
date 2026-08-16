@@ -130,6 +130,12 @@ try {
     & (Join-Path $repoRoot 'eng/package-manifest.ps1') -PackageDirectory $invalidPackage | Out-Null
     $validResult = & (Join-Path $repoRoot 'eng/verify-package.ps1') -PackageDirectory $invalidPackage | ConvertFrom-Json
     Assert-True ($validResult.status -eq 'ok') 'A valid minimal x64 package must pass verification.'
+    [IO.File]::WriteAllText((Join-Path $invalidPackage 'oauth.local.json'), '{"clientId":"11111111-1111-1111-1111-111111111111"}', [Text.UTF8Encoding]::new($false))
+    & (Join-Path $repoRoot 'eng/package-manifest.ps1') -PackageDirectory $invalidPackage | Out-Null
+    Assert-FailsWith {
+        & (Join-Path $repoRoot 'eng/verify-package.ps1') -PackageDirectory $invalidPackage
+    } 'PACKAGE_FORBIDDEN_PATH'
+    Remove-Item -LiteralPath (Join-Path $invalidPackage 'oauth.local.json') -Force
     [IO.File]::WriteAllText((Join-Path $invalidPackage 'secret.txt'), 'Bearer abcdefghijklmnop', [Text.UTF8Encoding]::new($false))
     & (Join-Path $repoRoot 'eng/package-manifest.ps1') -PackageDirectory $invalidPackage | Out-Null
     Assert-FailsWith {

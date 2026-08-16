@@ -35,6 +35,8 @@ cache/
 .env
 .env.*
 !.env.example
+.entra-id
+.entra-id.*
 *.Local.json
 *.local.json
 secrets.json
