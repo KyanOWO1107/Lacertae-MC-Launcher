@@ -188,9 +188,9 @@ public sealed class HttpArtifactDownloaderTests
         DownloadArtifact artifact = DownloadTestSupport.Artifact(content);
         DownloadTestSupport.ScriptedHandler handler = new((request, number, _) => number switch
         {
-            1 => Task.FromResult(DownloadTestSupport.Redirect("https://cdn.example.test/one")),
-            2 => Task.FromResult(DownloadTestSupport.Redirect("https://cdn.example.test/two")),
-            3 => Task.FromResult(DownloadTestSupport.Redirect("https://cdn.example.test/three")),
+            1 => Task.FromResult(DownloadTestSupport.Redirect("https://piston-data.mojang.com/one")),
+            2 => Task.FromResult(DownloadTestSupport.Redirect("https://piston-data.mojang.com/two")),
+            3 => Task.FromResult(DownloadTestSupport.Redirect("https://piston-data.mojang.com/three")),
             _ => Task.FromResult(DownloadTestSupport.Ok(content)),
         });
 
@@ -201,6 +201,24 @@ public sealed class HttpArtifactDownloaderTests
 
         Assert.True(result.IsSuccess, result.Problem?.Code);
         Assert.Equal(4, handler.Requests.Count);
+    }
+
+    [Fact]
+    public async Task DownloadRejectsCrossHostHttpsRedirect()
+    {
+        using DownloadTestSupport.TemporaryDirectory root = new();
+        DownloadArtifact artifact = DownloadTestSupport.Artifact([3, 1, 4]);
+        DownloadTestSupport.ScriptedHandler handler = new((_, _, _) =>
+            Task.FromResult(DownloadTestSupport.Redirect("https://cdn.example.test/object")));
+
+        Result<DownloadReceipt> result = await CreateDownloader(handler).DownloadAsync(
+            DownloadTestSupport.Request(artifact, root.Path),
+            new Progress<OperationProgress>(),
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("DOWNLOAD_REDIRECT_REJECTED", result.Problem?.Code);
+        Assert.Single(handler.Requests);
     }
 
     [Fact]

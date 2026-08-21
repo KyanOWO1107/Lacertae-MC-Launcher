@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Diagnostics;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -64,11 +65,14 @@ public sealed class BuildDiagnosticBundle
             }
 
             string stagingRoot = ResolveStagingDirectory(request);
-            EnsureNoReparsePath(stagingRoot);
-            Directory.CreateDirectory(stagingRoot);
+            SecureFileSystem.EnsureDirectory(stagingRoot);
             string handleId = Guid.NewGuid().ToString("N");
             string stagingPath = Path.Combine(stagingRoot, handleId);
-            Directory.CreateDirectory(stagingPath);
+            SecureFileSystem.EnsureDirectory(stagingPath, stagingRoot);
+            // Keep the prepared directory and every existing parent bound to
+            // the objects validated above until all staged entries and the
+            // manifest have been written.
+            using IDisposable stagingLease = SecureFileSystem.OpenDirectoryLease(stagingPath, stagingRoot);
 
             BundleRedactor redactor = new(sanitizer, request.GetPrivatePathPrefixes());
             List<StagedEntry> staged = [];
@@ -164,8 +168,8 @@ public sealed class BuildDiagnosticBundle
             foreach (StagedEntry entry in staged)
             {
                 string path = ResolveStagingFile(stagingPath, entry.LogicalName);
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                await File.WriteAllBytesAsync(path, entry.Bytes, cancellationToken);
+                SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(path)!, stagingPath);
+                await SecureFileSystem.WriteAtomicallyAsync(path, entry.Bytes, cancellationToken);
                 manifestEntries.Add(new DiagnosticBundleEntry(
                     entry.LogicalName,
                     entry.Bytes.LongLength,
@@ -216,7 +220,7 @@ public sealed class BuildDiagnosticBundle
             }
 
             string manifestPath = ResolveStagingFile(stagingPath, "manifest.json");
-            await File.WriteAllBytesAsync(manifestPath, manifestBytes, cancellationToken);
+            await SecureFileSystem.WriteAtomicallyAsync(manifestPath, manifestBytes, cancellationToken);
             DiagnosticBundlePreparedHandle handle = new(handleId);
             return Result<PreparedDiagnosticBundle>.Success(new PreparedDiagnosticBundle(manifest, handle));
         }
@@ -313,13 +317,7 @@ public sealed class BuildDiagnosticBundle
             return null;
         }
 
-        await using FileStream stream = new(
-            fullPath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite | FileShare.Delete,
-            bufferSize: 64 * 1024,
-            options: FileOptions.SequentialScan);
+        await using Stream stream = SecureFileSystem.OpenRead(fullPath);
         if (stream.Length > MaximumTextBytes)
         {
             throw new BundleLimitException();

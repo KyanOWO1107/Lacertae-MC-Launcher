@@ -35,6 +35,7 @@
 | 网络 | 离线启动、官方失败后经确认的镜像、取消/恢复、错误哈希 | NOT RUN | |
 | 启动 | 离线与已批准的 Microsoft 登录、普通/崩溃/停止 | NOT RUN | |
 | 诊断 | 预览、导出、脱敏扫描 | NOT RUN | |
+| 路径安全 | junction/reparse 竞态、目标目录 ACL、诊断/安装/更新写入边界 | NOT RUN | 代码级安全测试不替代 Windows 原生对象身份和 ACL 证据 |
 | 更新 | 有效签名、错误签名/哈希、替换失败回滚 | BLOCKED | 真实 key/domain 尚未配置 |
 
 运行 `./eng/run-acceptance-preflight.ps1 -AcceptanceRoot <明确目录> -PackagePath <可选 ZIP>` 只做环境检查，不会删除任何真实用户目录。

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Lacertae.Application.Diagnostics;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Diagnostics;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -73,8 +74,11 @@ public sealed class ZipDiagnosticBundleWriter
         try
         {
             string stagingPath = ResolveHandlePath(handle);
+            using IDisposable stagingLease = SecureFileSystem.OpenDirectoryLease(stagingPath, stagingRoot);
             ValidateStagingDirectory(stagingPath);
             string outputPath = Path.GetFullPath(destinationPath);
+            string outputParent = Path.GetDirectoryName(outputPath)!;
+            using IDisposable outputLease = SecureFileSystem.OpenDirectoryLease(outputParent);
             ValidateDestinationPath(outputPath);
 
             DiagnosticBundleManifest safeManifest = ValidateManifest(manifest);
@@ -93,14 +97,15 @@ public sealed class ZipDiagnosticBundleWriter
                 cancellationToken.ThrowIfCancellationRequested();
                 string sourcePath = ResolveStagingFile(stagingPath, entry.LogicalName);
                 ValidateStagingFile(stagingPath, sourcePath);
-                FileInfo info = new(sourcePath);
-                if (info.Length > MaximumTextBytes || entry.Size != info.Length)
+                long entryBytes;
+                await using (Stream hashStream = SecureFileSystem.OpenRead(sourcePath, stagingPath))
                 {
-                    return Failure<string>("DIAGNOSTIC_BUNDLE_LIMIT_EXCEEDED");
-                }
+                    entryBytes = hashStream.Length;
+                    if (entryBytes > MaximumTextBytes || entry.Size != entryBytes)
+                    {
+                        return Failure<string>("DIAGNOSTIC_BUNDLE_LIMIT_EXCEEDED");
+                    }
 
-                await using (FileStream hashStream = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                {
                     string actualHash = Convert.ToHexString(
                         await SHA256.HashDataAsync(hashStream, cancellationToken)).ToLowerInvariant();
                     if (!string.Equals(actualHash, entry.Sha256, StringComparison.OrdinalIgnoreCase))
@@ -109,7 +114,7 @@ public sealed class ZipDiagnosticBundleWriter
                     }
                 }
 
-                contentBytes = checked(contentBytes + info.Length);
+                contentBytes = checked(contentBytes + entryBytes);
                 if (contentBytes > MaximumBundleBytes)
                 {
                     return Failure<string>("DIAGNOSTIC_BUNDLE_LIMIT_EXCEEDED");
@@ -123,20 +128,11 @@ public sealed class ZipDiagnosticBundleWriter
             }
 
             string temporaryPath = outputPath + ".part";
-            if (File.Exists(temporaryPath))
-            {
-                File.Delete(temporaryPath);
-            }
+            SecureFileSystem.DeleteFile(temporaryPath, outputParent);
 
             try
             {
-                await using (FileStream stream = new(
-                    temporaryPath,
-                    FileMode.CreateNew,
-                    FileAccess.ReadWrite,
-                    FileShare.None,
-                    bufferSize: 64 * 1024,
-                    options: FileOptions.SequentialScan))
+                await using (Stream stream = SecureFileSystem.OpenWrite(temporaryPath, FileMode.CreateNew, outputParent))
                 using (ZipArchive archive = new(stream, ZipArchiveMode.Create, leaveOpen: false, Encoding.UTF8))
                 {
                     foreach (DiagnosticBundleEntry entry in includedEntries)
@@ -151,15 +147,17 @@ public sealed class ZipDiagnosticBundleWriter
                     await manifestStream.WriteAsync(manifestBytes, cancellationToken);
                 }
 
-                File.Move(temporaryPath, outputPath, overwrite: true);
+                SecureFileSystem.MoveReplace(temporaryPath, outputPath, outputParent);
+                if (!SecureFileSystem.IsSafeFile(outputPath, outputParent))
+                {
+                    throw new DiagnosticBundleReparsePointException();
+                }
+
                 return Result<string>.Success(outputPath);
             }
             finally
             {
-                if (File.Exists(temporaryPath))
-                {
-                    File.Delete(temporaryPath);
-                }
+                SecureFileSystem.DeleteFile(temporaryPath, outputParent);
             }
         }
         catch (OperationCanceledException)
@@ -197,9 +195,24 @@ public sealed class ZipDiagnosticBundleWriter
         ValidateStagingFile(stagingPath, sourcePath);
         ZipArchiveEntry archiveEntry = archive.CreateEntry(entry.LogicalName, CompressionLevel.Optimal);
         archiveEntry.LastWriteTime = DeterministicTimestamp;
-        using FileStream source = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using Stream source = SecureFileSystem.OpenRead(sourcePath, stagingPath);
         using Stream destination = archiveEntry.Open();
-        source.CopyTo(destination);
+        using IncrementalHash hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        byte[] buffer = new byte[64 * 1024];
+        long total = 0;
+        int read;
+        while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            total = checked(total + read);
+            hash.AppendData(buffer, 0, read);
+            destination.Write(buffer, 0, read);
+        }
+
+        string actualHash = Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+        if (total != entry.Size || !string.Equals(actualHash, entry.Sha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DiagnosticBundleInvalidException();
+        }
     }
 
     private static DiagnosticBundleManifest ValidateManifest(DiagnosticBundleManifest manifest)
@@ -297,13 +310,21 @@ public sealed class ZipDiagnosticBundleWriter
         ValidateDirectoryChain(parent);
         if (File.Exists(outputPath))
         {
-            ValidateRegularFile(outputPath);
+            ValidateRegularFile(outputPath, parent);
+        }
+        else if (Directory.Exists(outputPath))
+        {
+            throw new DiagnosticBundleInvalidException();
         }
 
         string temporaryPath = outputPath + ".part";
         if (File.Exists(temporaryPath))
         {
-            ValidateRegularFile(temporaryPath);
+            ValidateRegularFile(temporaryPath, parent);
+        }
+        else if (Directory.Exists(temporaryPath))
+        {
+            throw new DiagnosticBundleInvalidException();
         }
     }
 
@@ -336,7 +357,7 @@ public sealed class ZipDiagnosticBundleWriter
     private static void ValidateStagingFile(string stagingPath, string path)
     {
         ValidateDirectoryChain(Path.GetDirectoryName(path)!, stagingPath);
-        ValidateRegularFile(path);
+        ValidateRegularFile(path, stagingPath);
     }
 
     private static void ValidateDirectoryChain(string path, string? allowedRoot = null)
@@ -381,17 +402,11 @@ public sealed class ZipDiagnosticBundleWriter
         }
     }
 
-    private static void ValidateRegularFile(string path)
+    private static void ValidateRegularFile(string path, string root)
     {
-        if (!File.Exists(path))
+        if (!SecureFileSystem.IsSafeFile(path, root))
         {
             throw new DiagnosticBundleInvalidException();
-        }
-
-        FileAttributes attributes = File.GetAttributes(path);
-        if ((attributes & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new DiagnosticBundleReparsePointException();
         }
     }
 

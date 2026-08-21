@@ -1,3 +1,4 @@
+using Lacertae.Application.Storage;
 using Lacertae.Domain.GameRoots;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -24,9 +25,14 @@ public static class ResolveVersionDirectory
             StringComparison comparison = OperatingSystem.IsWindows()
                 ? StringComparison.OrdinalIgnoreCase
                 : StringComparison.Ordinal;
-            return path.StartsWith(prefix, comparison)
-                ? Result<string>.Success(path)
-                : Result<string>.Failure(Problem("VERSION_DIRECTORY_NOT_ALLOWED"));
+            if (!path.StartsWith(prefix, comparison) ||
+                !SecureFileSystem.IsSafeDirectory(versionsRoot) ||
+                !SecureFileSystem.IsSafeDirectory(path, versionsRoot))
+            {
+                return Result<string>.Failure(Problem("VERSION_DIRECTORY_NOT_ALLOWED"));
+            }
+
+            return Result<string>.Success(path);
         }
         catch (ArgumentException)
         {

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -55,17 +56,15 @@ public sealed class ConfirmUpdateHealth
         {
             updatesPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.UpdatesPath));
             string healthDirectory = GetHealthDirectory(updatesPath);
-            EnsureSafeDirectory(updatesPath);
-            Directory.CreateDirectory(healthDirectory);
-            EnsureSafeDirectory(healthDirectory);
+            SecureFileSystem.EnsureDirectory(updatesPath);
+            SecureFileSystem.EnsureDirectory(healthDirectory, updatesPath);
             string healthPath = GetHealthFilePath(updatesPath, request.HealthNonce);
-            string temporaryPath = healthPath + ".tmp";
             UpdateHealthDocument document = new(1, request.HealthNonce, request.ProcessId, timeProvider.GetUtcNow());
-            await File.WriteAllBytesAsync(
-                temporaryPath,
+            await SecureFileSystem.WriteAtomicallyAsync(
+                healthPath,
                 JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions),
-                cancellationToken);
-            File.Move(temporaryPath, healthPath, overwrite: true);
+                cancellationToken,
+                updatesPath);
             return Result.Success();
         }
         catch (OperationCanceledException)
@@ -108,25 +107,6 @@ public sealed class ConfirmUpdateHealth
     private static bool IsNonce(string value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length is >= 16 and <= MaximumNonceLength &&
         value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_');
-
-    private static void EnsureSafeDirectory(string path)
-    {
-        if (!Directory.Exists(path))
-        {
-            throw new IOException("Health directory is unavailable.");
-        }
-
-        FileSystemInfo? current = new DirectoryInfo(path);
-        while (current is not null)
-        {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException("Health path contains a reparse point.");
-            }
-
-            current = current is DirectoryInfo directory ? directory.Parent : null;
-        }
-    }
 
     private static Result<Unit> Failure(string code, string correlationId) => Result<Unit>.Failure(new Problem(
         code,

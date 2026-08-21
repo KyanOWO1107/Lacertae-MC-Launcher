@@ -5,5 +5,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Lacertae.Domain\Lacertae.Domain.csproj" />
+    <ProjectReference Include="..\Lacertae.Application\Lacertae.Application.csproj" />
   </ItemGroup>
 </Project>

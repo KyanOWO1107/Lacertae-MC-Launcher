@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -18,7 +19,7 @@ public sealed class RenameVersionFolder(
         bool hasActiveBackgroundTask,
         CancellationToken cancellationToken)
     {
-        Result<VersionRenamePlan> preflight = await PreflightAsync(
+        Result<VersionRenamePlan> preflight = await PrepareAsync(
             gameRootId,
             gameRootPath,
             sourceFolder,
@@ -41,7 +42,16 @@ public sealed class RenameVersionFolder(
 
         try
         {
-            Directory.Move(plan.SourcePath, plan.TargetPath);
+            SecureFileSystem.MoveDirectoryCreate(
+                plan.SourcePath,
+                plan.TargetPath,
+                Path.GetDirectoryName(plan.SourcePath)!);
+            // Bind the moved directory before touching any files inside it.
+            // If a local process substituted a reparse point during the
+            // rename window, this fails closed before JSON/JAR writes occur.
+            using IDisposable targetLease = SecureFileSystem.OpenDirectoryLease(
+                plan.TargetPath,
+                Path.GetDirectoryName(plan.SourcePath)!);
             Result<Unit> moved = await journal.WriteAsync(
                 new VersionRenameJournalEntry(plan, VersionRenameJournalState.DirectoryMoved),
                 cancellationToken);
@@ -118,6 +128,11 @@ public sealed class RenameVersionFolder(
         VersionRenamePlan plan = read.Value.Plan;
         bool sourceExists = Directory.Exists(plan.SourcePath);
         bool targetExists = Directory.Exists(plan.TargetPath);
+        if ((sourceExists && !SecureFileSystem.IsSafeDirectory(plan.SourcePath, Path.GetDirectoryName(plan.SourcePath)!)) ||
+            (targetExists && !SecureFileSystem.IsSafeDirectory(plan.TargetPath, Path.GetDirectoryName(plan.TargetPath)!)))
+        {
+            return Result.Failure(Problem("VERSION_RENAME_FAILED"));
+        }
         if (sourceExists && targetExists)
         {
             return Result.Failure(Problem("VERSION_RENAME_CONFLICT"));
@@ -135,6 +150,9 @@ public sealed class RenameVersionFolder(
                 return await RollbackAsync(plan, cancellationToken);
             }
 
+            using IDisposable targetLease = SecureFileSystem.OpenDirectoryLease(
+                plan.TargetPath,
+                Path.GetDirectoryName(plan.SourcePath)!);
             if (read.Value.State is VersionRenameJournalState.DirectoryMoved)
             {
                 try
@@ -180,6 +198,11 @@ public sealed class RenameVersionFolder(
     {
         bool sourceExists = Directory.Exists(plan.SourcePath);
         bool targetExists = Directory.Exists(plan.TargetPath);
+        if ((sourceExists && !SecureFileSystem.IsSafeDirectory(plan.SourcePath, Path.GetDirectoryName(plan.SourcePath)!)) ||
+            (targetExists && !SecureFileSystem.IsSafeDirectory(plan.TargetPath, Path.GetDirectoryName(plan.TargetPath)!)))
+        {
+            return Result.Failure(Problem("VERSION_RENAME_ROLLBACK_FAILED"));
+        }
         if (sourceExists && targetExists)
         {
             return Result.Failure(Problem("VERSION_RENAME_CONFLICT"));
@@ -189,8 +212,17 @@ public sealed class RenameVersionFolder(
         {
             try
             {
-                RestoreFilesAndJson(plan);
-                Directory.Move(plan.TargetPath, plan.SourcePath);
+                using (SecureFileSystem.OpenDirectoryLease(
+                           plan.TargetPath,
+                           Path.GetDirectoryName(plan.SourcePath)!))
+                {
+                    RestoreFilesAndJson(plan);
+                }
+
+                SecureFileSystem.MoveDirectoryCreate(
+                    plan.TargetPath,
+                    plan.SourcePath,
+                    Path.GetDirectoryName(plan.SourcePath)!);
             }
             catch (IOException)
             {
@@ -213,13 +245,32 @@ public sealed class RenameVersionFolder(
         bool hasActiveBackgroundTask,
         CancellationToken cancellationToken)
     {
-        return await PreflightAsync(
-            gameRootId,
-            gameRootPath,
-            sourceFolder,
-            targetFolder,
-            hasActiveBackgroundTask,
-            cancellationToken);
+        try
+        {
+            return await PreflightAsync(
+                gameRootId,
+                gameRootPath,
+                sourceFolder,
+                targetFolder,
+                hasActiveBackgroundTask,
+                cancellationToken);
+        }
+        catch (IOException)
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_FAILED"));
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_FAILED"));
+        }
+        catch (NotSupportedException)
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_INVALID_NAME"));
+        }
+        catch (ArgumentException)
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_INVALID_NAME"));
+        }
     }
 
     private static async Task<Result<VersionRenamePlan>> PreflightAsync(
@@ -250,7 +301,9 @@ public sealed class RenameVersionFolder(
             return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_INVALID_NAME"));
         }
 
-        if (!Directory.Exists(sourcePath))
+        if (!Directory.Exists(versionsPath) ||
+            !SecureFileSystem.IsSafeDirectory(versionsPath) ||
+            !SecureFileSystem.IsSafeDirectory(sourcePath, versionsPath))
         {
             return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_SOURCE_MISSING"));
         }
@@ -262,25 +315,37 @@ public sealed class RenameVersionFolder(
 
         string sourceJsonPath = Path.Combine(sourcePath, sourceFolder + ".json");
         string sourceJarPath = Path.Combine(sourcePath, sourceFolder + ".jar");
-        if (!File.Exists(sourceJsonPath))
+        if (!SecureFileSystem.IsSafeFile(sourceJsonPath, sourcePath))
         {
             return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_JSON_MISSING"));
         }
 
-        string? actualJarPath = File.Exists(sourceJarPath) ? sourceJarPath : null;
-        if (Directory.EnumerateFiles(sourcePath, "*.json", SearchOption.TopDirectoryOnly)
+        string? actualJarPath = SecureFileSystem.IsSafeFile(sourceJarPath, sourcePath) ? sourceJarPath : null;
+        if (File.Exists(sourceJarPath) && actualJarPath is null)
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_JAR_BASENAME_MISMATCH"));
+        }
+
+        if (Directory.EnumerateFileSystemEntries(sourcePath)
+            .Any(path => Directory.Exists(path)
+                ? !SecureFileSystem.IsSafeDirectory(path, sourcePath)
+                : !SecureFileSystem.IsSafeFile(path, sourcePath)))
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_FAILED"));
+        }
+        if (EnumerateFilesSecure(sourcePath, "*.json")
                 .Any(path => !string.Equals(Path.GetFileName(path), sourceFolder + ".json", StringComparison.OrdinalIgnoreCase)))
         {
             return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_JSON_BASENAME_MISMATCH"));
         }
 
-        if (Directory.EnumerateFiles(sourcePath, "*.jar", SearchOption.TopDirectoryOnly)
+        if (EnumerateFilesSecure(sourcePath, "*.jar")
                 .Any(path => !string.Equals(Path.GetFileName(path), sourceFolder + ".jar", StringComparison.OrdinalIgnoreCase)))
         {
             return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_JAR_BASENAME_MISMATCH"));
         }
 
-        string sourceJson = await File.ReadAllTextAsync(sourceJsonPath, cancellationToken);
+        string sourceJson = await ReadTextSecureAsync(sourceJsonPath, sourcePath, cancellationToken);
         using JsonDocument document = JsonDocument.Parse(sourceJson);
         if (document.RootElement.TryGetProperty("id", out JsonElement id) &&
             id.ValueKind == JsonValueKind.String &&
@@ -290,7 +355,7 @@ public sealed class RenameVersionFolder(
         }
 
         List<string> referringFolders = [];
-        foreach (string siblingJsonPath in Directory.EnumerateFiles(versionsPath, "*.json", SearchOption.AllDirectories))
+        foreach (string siblingJsonPath in EnumerateJsonFiles(versionsPath))
         {
             if (string.Equals(siblingJsonPath, sourceJsonPath, StringComparison.OrdinalIgnoreCase))
             {
@@ -299,7 +364,8 @@ public sealed class RenameVersionFolder(
 
             try
             {
-                using JsonDocument siblingDocument = JsonDocument.Parse(await File.ReadAllTextAsync(siblingJsonPath, cancellationToken));
+                using JsonDocument siblingDocument = JsonDocument.Parse(
+                    await ReadTextSecureAsync(siblingJsonPath, versionsPath, cancellationToken));
                 if (siblingDocument.RootElement.TryGetProperty("inheritsFrom", out JsonElement inheritsFrom) &&
                     inheritsFrom.ValueKind == JsonValueKind.String &&
                     string.Equals(inheritsFrom.GetString(), sourceFolder, StringComparison.Ordinal))
@@ -320,7 +386,13 @@ public sealed class RenameVersionFolder(
                 new Dictionary<string, string> { ["referringFolders"] = string.Join(",", referringFolders.Order(StringComparer.Ordinal)) }));
         }
 
-        bool containsIsolatedGameData = Directory.EnumerateDirectories(sourcePath, "*", SearchOption.TopDirectoryOnly)
+        string[] topLevelDirectories = Directory.EnumerateDirectories(sourcePath, "*", SearchOption.TopDirectoryOnly).ToArray();
+        if (topLevelDirectories.Any(path => !SecureFileSystem.IsSafeDirectory(path, sourcePath)))
+        {
+            return Result<VersionRenamePlan>.Failure(Problem("VERSION_RENAME_FAILED"));
+        }
+
+        bool containsIsolatedGameData = topLevelDirectories
             .Any(static path => Path.GetFileName(path) is "mods" or "config" or "saves" or "resourcepacks" or "shaderpacks");
         return Result<VersionRenamePlan>.Success(new VersionRenamePlan(
             Guid.NewGuid().ToString("N"),
@@ -339,11 +411,11 @@ public sealed class RenameVersionFolder(
     private static void RenameFilesAndJson(VersionRenamePlan plan)
     {
         string targetJsonPath = Path.Combine(plan.TargetPath, plan.SourceFolder + ".json");
-        if (File.Exists(targetJsonPath))
+        if (SecureFileSystem.IsSafeFile(targetJsonPath, plan.TargetPath))
         {
-            File.Move(targetJsonPath, plan.TargetJsonPath);
+            SecureFileSystem.MoveCreate(targetJsonPath, plan.TargetJsonPath, plan.TargetPath);
         }
-        else if (!File.Exists(plan.TargetJsonPath))
+        else if (!SecureFileSystem.IsSafeFile(plan.TargetJsonPath, plan.TargetPath))
         {
             throw new IOException("Version JSON is missing during rename.");
         }
@@ -351,17 +423,17 @@ public sealed class RenameVersionFolder(
         if (plan.SourceJarPath is not null && plan.TargetJarPath is not null)
         {
             string sourceJarPath = Path.Combine(plan.TargetPath, plan.SourceFolder + ".jar");
-            if (File.Exists(sourceJarPath))
+            if (SecureFileSystem.IsSafeFile(sourceJarPath, plan.TargetPath))
             {
-                File.Move(sourceJarPath, plan.TargetJarPath);
+                SecureFileSystem.MoveCreate(sourceJarPath, plan.TargetJarPath, plan.TargetPath);
             }
-            else if (!File.Exists(plan.TargetJarPath))
+            else if (!SecureFileSystem.IsSafeFile(plan.TargetJarPath, plan.TargetPath))
             {
                 throw new IOException("Version JAR is missing during rename.");
             }
         }
 
-        string json = File.ReadAllText(plan.TargetJsonPath);
+        string json = ReadTextSecure(plan.TargetJsonPath, plan.TargetPath);
         using JsonDocument document = JsonDocument.Parse(json);
         if (document.RootElement.TryGetProperty("id", out JsonElement id) &&
             id.ValueKind == JsonValueKind.String &&
@@ -371,7 +443,7 @@ public sealed class RenameVersionFolder(
             Dictionary<string, JsonElement> properties = updatedDocument.RootElement.EnumerateObject()
                 .ToDictionary(static property => property.Name, static property => property.Value, StringComparer.Ordinal);
             properties["id"] = JsonDocument.Parse(JsonSerializer.Serialize(plan.TargetFolder)).RootElement.Clone();
-            File.WriteAllText(plan.TargetJsonPath, JsonSerializer.Serialize(properties));
+            WriteTextSecure(plan.TargetJsonPath, JsonSerializer.Serialize(properties), plan.TargetPath);
         }
     }
 
@@ -380,9 +452,9 @@ public sealed class RenameVersionFolder(
         string targetJsonPath = Path.Combine(plan.TargetPath, plan.TargetFolder + ".json");
         string legacyJsonPath = Path.Combine(plan.TargetPath, plan.SourceFolder + ".json");
         string sourceJsonPath = Path.Combine(plan.TargetPath, plan.SourceFolder + ".json");
-        if (File.Exists(targetJsonPath))
+        if (SecureFileSystem.IsSafeFile(targetJsonPath, plan.TargetPath))
         {
-            string json = File.ReadAllText(targetJsonPath);
+            string json = ReadTextSecure(targetJsonPath, plan.TargetPath);
             using JsonDocument document = JsonDocument.Parse(json);
             if (document.RootElement.TryGetProperty("id", out JsonElement id) &&
                 id.ValueKind == JsonValueKind.String &&
@@ -391,22 +463,84 @@ public sealed class RenameVersionFolder(
                 Dictionary<string, JsonElement> properties = document.RootElement.EnumerateObject()
                     .ToDictionary(static property => property.Name, static property => property.Value, StringComparer.Ordinal);
                 properties["id"] = JsonDocument.Parse(JsonSerializer.Serialize(plan.SourceFolder)).RootElement.Clone();
-                File.WriteAllText(targetJsonPath, JsonSerializer.Serialize(properties));
+                WriteTextSecure(targetJsonPath, JsonSerializer.Serialize(properties), plan.TargetPath);
             }
 
-            File.Move(targetJsonPath, sourceJsonPath);
+            SecureFileSystem.MoveCreate(targetJsonPath, sourceJsonPath, plan.TargetPath);
         }
-        else if (!File.Exists(legacyJsonPath))
+        else if (!SecureFileSystem.IsSafeFile(legacyJsonPath, plan.TargetPath))
         {
             throw new IOException("Renamed version JSON is missing during rollback.");
         }
 
         string targetJarPath = Path.Combine(plan.TargetPath, plan.TargetFolder + ".jar");
-        if (File.Exists(targetJarPath))
+        if (SecureFileSystem.IsSafeFile(targetJarPath, plan.TargetPath))
         {
-            File.Move(targetJarPath, Path.Combine(plan.TargetPath, plan.SourceFolder + ".jar"));
+            SecureFileSystem.MoveCreate(
+                targetJarPath,
+                Path.Combine(plan.TargetPath, plan.SourceFolder + ".jar"),
+                plan.TargetPath);
         }
     }
+
+    private static IEnumerable<string> EnumerateFilesSecure(string directory, string pattern)
+    {
+        foreach (string path in Directory.EnumerateFiles(directory, pattern, SearchOption.TopDirectoryOnly))
+        {
+            if (!SecureFileSystem.IsSafeFile(path, directory))
+            {
+                throw new IOException("Version directory contains an unsafe file.");
+            }
+
+            yield return path;
+        }
+    }
+
+    private static IEnumerable<string> EnumerateJsonFiles(string root)
+    {
+        Stack<string> pending = new([root]);
+        while (pending.Count > 0)
+        {
+            string current = pending.Pop();
+            if (!SecureFileSystem.IsSafeDirectory(current, root))
+            {
+                throw new IOException("Version directory contains an unsafe directory.");
+            }
+
+            foreach (string file in EnumerateFilesSecure(current, "*.json"))
+            {
+                yield return file;
+            }
+
+            foreach (string child in Directory.EnumerateDirectories(current, "*", SearchOption.TopDirectoryOnly))
+            {
+                pending.Push(child);
+            }
+        }
+    }
+
+    private static async Task<string> ReadTextSecureAsync(
+        string path,
+        string root,
+        CancellationToken cancellationToken)
+    {
+        await using Stream stream = SecureFileSystem.OpenRead(path, root);
+        using StreamReader reader = new(stream);
+        return await reader.ReadToEndAsync(cancellationToken);
+    }
+
+    private static string ReadTextSecure(string path, string root)
+    {
+        using Stream stream = SecureFileSystem.OpenRead(path, root);
+        using StreamReader reader = new(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static void WriteTextSecure(string path, string content, string root) =>
+        SecureFileSystem.WriteAtomically(
+            path,
+            System.Text.Encoding.UTF8.GetBytes(content),
+            root);
 
     private async Task<Result<Unit>> MigrateOverrideAsync(VersionRenamePlan plan, CancellationToken cancellationToken)
     {

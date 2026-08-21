@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Updates;
 
 namespace Lacertae.Updater;
@@ -134,7 +135,7 @@ public sealed class UpdateApplier
             EnsureNoReparsePath(plan.StagingDirectory, mustExist: true);
             EnsureNoReparsePath(plan.BackupDirectory, mustExist: false);
             EnsureNoReparsePath(Path.GetDirectoryName(plan.HealthFilePath)!, mustExist: false);
-            Directory.CreateDirectory(plan.BackupDirectory);
+            SecureFileSystem.EnsureDirectory(plan.BackupDirectory);
 
             journal = new UpdateApplyJournal(journalPath);
             journal.SetState("applying");
@@ -163,15 +164,22 @@ public sealed class UpdateApplier
             await InstallNewFilesAsync(plan, newInstalledFiles, newFiles, journal, cancellationToken);
 
             string executablePath = ResolveUnderRoot(plan.InstallDirectory, plan.NewExecutableRelativePath);
-            if (!File.Exists(executablePath))
+            if (!SafeFileExists(executablePath, plan.InstallDirectory))
             {
                 throw new UpdateApplyException("UPDATE_EXECUTABLE_MISSING");
             }
 
-            child = processLauncher.Start(
-                executablePath,
-                plan.InstallDirectory,
-                ["--update-health", plan.HealthNonce]);
+            // Keep the validated executable object open without delete sharing
+            // until the process launcher has handed the path to CreateProcess.
+            // A path-only check would allow a local process to replace the file
+            // in the small check-to-start window.
+            await using (Stream executableLease = SecureFileSystem.OpenReadExclusive(executablePath, plan.InstallDirectory))
+            {
+                child = processLauncher.Start(
+                    executablePath,
+                    plan.InstallDirectory,
+                    ["--update-health", plan.HealthNonce]);
+            }
             rollbackNeeded = true;
             bool healthy = await WaitForHealthAsync(plan, child, cancellationToken);
             if (!healthy)
@@ -229,7 +237,7 @@ public sealed class UpdateApplier
         {
             cancellationToken.ThrowIfCancellationRequested();
             string source = ResolveUnderRoot(plan.InstallDirectory, relativePath);
-            if (!File.Exists(source))
+            if (!SafeFileExists(source, plan.InstallDirectory))
             {
                 if (relativePath == "package-manifest.json")
                 {
@@ -240,7 +248,7 @@ public sealed class UpdateApplier
             }
 
             if (!manifest.TryGetValue(relativePath, out PackageFile? expected) ||
-                !HasExpectedFile(source, expected))
+                !HasExpectedFile(source, expected, plan.InstallDirectory))
             {
                 throw new UpdateApplyException("UPDATE_OLD_FILE_HASH_MISMATCH");
             }
@@ -270,7 +278,7 @@ public sealed class UpdateApplier
         {
             cancellationToken.ThrowIfCancellationRequested();
             string source = ResolveUnderRoot(plan.InstallDirectory, relativePath);
-            if (!File.Exists(source))
+            if (!SafeFileExists(source, plan.InstallDirectory))
             {
                 continue;
             }
@@ -283,7 +291,7 @@ public sealed class UpdateApplier
                 UpdateApplyJournal.Sha256(source),
                 null,
                 Applied: false));
-            File.Delete(source);
+            SecureFileSystem.DeleteFile(source, plan.InstallDirectory);
             journal.MarkApplied(entry);
         }
 
@@ -303,12 +311,12 @@ public sealed class UpdateApplier
             string source = ResolveUnderRoot(plan.StagingDirectory, relativePath);
             string destination = ResolveUnderRoot(plan.InstallDirectory, relativePath);
             if (!manifest.TryGetValue(relativePath, out PackageFile? expected) ||
-                !File.Exists(source) || !HasExpectedFile(source, expected))
+                !SafeFileExists(source, plan.StagingDirectory) || !HasExpectedFile(source, expected, plan.StagingDirectory))
             {
                 throw new UpdateApplyException("UPDATE_NEW_FILE_HASH_MISMATCH");
             }
 
-            if (File.Exists(destination))
+            if (SafeFileExists(destination, plan.InstallDirectory) || Directory.Exists(destination))
             {
                 throw new UpdateApplyException("UPDATE_INSTALL_DESTINATION_NOT_EMPTY");
             }
@@ -338,15 +346,21 @@ public sealed class UpdateApplier
         timeoutSource.CancelAfter(plan.HealthTimeout);
         while (true)
         {
-            if (File.Exists(plan.HealthFilePath))
+            if (SafeFileExists(plan.HealthFilePath, Path.GetDirectoryName(plan.HealthFilePath)!))
             {
-                FileInfo info = new(plan.HealthFilePath);
-                if (info.Length > MaximumHealthBytes)
+                string contents;
+                await using (Stream stream = SecureFileSystem.OpenRead(
+                                   plan.HealthFilePath,
+                                   Path.GetDirectoryName(plan.HealthFilePath)!))
                 {
-                    return false;
-                }
+                    if (stream.Length > MaximumHealthBytes)
+                    {
+                        return false;
+                    }
 
-                string contents = await File.ReadAllTextAsync(plan.HealthFilePath, timeoutSource.Token);
+                    using StreamReader reader = new(stream);
+                    contents = await reader.ReadToEndAsync(timeoutSource.Token);
+                }
                 if (IsValidHealth(contents, plan.HealthNonce, child.Id))
                 {
                     return true;
@@ -396,9 +410,9 @@ public sealed class UpdateApplier
                 switch (entry.Kind)
                 {
                     case UpdateJournalOperationKind.InstallNew:
-                        if (entry.DestinationPath is not null && File.Exists(entry.DestinationPath))
+                        if (entry.DestinationPath is not null && SafeFileExists(entry.DestinationPath, plan.InstallDirectory))
                         {
-                            File.Delete(entry.DestinationPath);
+                            SecureFileSystem.DeleteFile(entry.DestinationPath, plan.InstallDirectory);
                         }
 
                         break;
@@ -406,14 +420,15 @@ public sealed class UpdateApplier
                         // The backup copy is restored by the Backup entry below.
                         break;
                     case UpdateJournalOperationKind.Backup:
-                        if (entry.SourcePath is null || entry.DestinationPath is null || !File.Exists(entry.DestinationPath))
+                        if (entry.SourcePath is null || entry.DestinationPath is null ||
+                            !SafeFileExists(entry.DestinationPath, plan.BackupDirectory))
                         {
                             return false;
                         }
 
                         EnsureParentDirectory(entry.SourcePath, plan.InstallDirectory);
                         CopyDurable(entry.DestinationPath, entry.SourcePath, new PackageFile(
-                            new FileInfo(entry.DestinationPath).Length,
+                            GetFileLength(entry.DestinationPath, plan.BackupDirectory),
                             entry.OldSha256 ?? UpdateApplyJournal.Sha256(entry.DestinationPath)));
                         break;
                 }
@@ -421,7 +436,7 @@ public sealed class UpdateApplier
 
             journal.SetState("rolled-back");
             string oldExecutable = ResolveUnderRoot(plan.InstallDirectory, plan.NewExecutableRelativePath);
-            if (File.Exists(oldExecutable))
+            if (SafeFileExists(oldExecutable, plan.InstallDirectory))
             {
                 using IUpdateProcess rollbackProcess = processLauncher.Start(
                     oldExecutable,
@@ -449,29 +464,29 @@ public sealed class UpdateApplier
     private static PackageManifest ReadPackageManifest(string stagingDirectory)
     {
         string path = ResolveUnderRoot(stagingDirectory, "package-manifest.json");
-        if (!File.Exists(path) || new FileInfo(path).Length > MaximumManifestBytes)
+        if (!SafeFileExists(path, stagingDirectory) || GetFileLength(path, stagingDirectory) > MaximumManifestBytes)
         {
             throw new UpdateApplyException("UPDATE_PACKAGE_MANIFEST_INVALID");
         }
 
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(path));
+        using JsonDocument document = JsonDocument.Parse(ReadAllBytes(path, stagingDirectory));
         return ParsePackageManifest(document.RootElement);
     }
 
     private static PackageManifest? ReadOptionalPackageManifest(string installDirectory)
     {
         string path = ResolveUnderRoot(installDirectory, "package-manifest.json");
-        if (!File.Exists(path))
+        if (!SafeFileExists(path, installDirectory))
         {
             return null;
         }
 
-        if (new FileInfo(path).Length > MaximumManifestBytes)
+        if (GetFileLength(path, installDirectory) > MaximumManifestBytes)
         {
             throw new UpdateApplyException("UPDATE_OLD_MANIFEST_INVALID");
         }
 
-        using JsonDocument document = JsonDocument.Parse(File.ReadAllBytes(path));
+        using JsonDocument document = JsonDocument.Parse(ReadAllBytes(path, installDirectory));
         return ParsePackageManifest(document.RootElement);
     }
 
@@ -556,10 +571,11 @@ public sealed class UpdateApplier
     {
         Dictionary<string, PackageFile> result = new(files, StringComparer.Ordinal);
         string manifestPath = ResolveUnderRoot(root, "package-manifest.json");
-        if (File.Exists(manifestPath))
+        if (SafeFileExists(manifestPath, root))
         {
-            FileInfo info = new(manifestPath);
-            result["package-manifest.json"] = new PackageFile(info.Length, UpdateApplyJournal.Sha256(manifestPath));
+            result["package-manifest.json"] = new PackageFile(
+                GetFileLength(manifestPath, root),
+                UpdateApplyJournal.Sha256(manifestPath));
         }
 
         return result;
@@ -591,6 +607,8 @@ public sealed class UpdateApplier
 
     private static string? ValidatePlan(UpdateApplyPlan plan)
     {
+        string? healthDirectory = Path.GetDirectoryName(plan.HealthFilePath);
+        string? updatesRoot = healthDirectory is null ? null : Path.GetDirectoryName(healthDirectory);
         if (plan.ParentProcessId <= 0 ||
             !IsAbsoluteNormalizedPath(plan.ParentExecutablePath) ||
             !IsAbsoluteNormalizedPath(plan.InstallDirectory) ||
@@ -607,7 +625,8 @@ public sealed class UpdateApplier
             return "UPDATE_PLAN_INVALID";
         }
 
-        if (!Directory.Exists(plan.InstallDirectory) || !Directory.Exists(plan.StagingDirectory) ||
+        if (!SecureFileSystem.IsSafeDirectory(plan.InstallDirectory) ||
+            !SecureFileSystem.IsSafeDirectory(plan.StagingDirectory) ||
             IsSamePath(plan.InstallDirectory, plan.StagingDirectory) ||
             IsSamePath(plan.InstallDirectory, plan.BackupDirectory) ||
             IsPathInside(plan.InstallDirectory, plan.StagingDirectory) ||
@@ -616,7 +635,12 @@ public sealed class UpdateApplier
             IsPathInside(plan.BackupDirectory, plan.StagingDirectory) ||
             IsPathInside(plan.InstallDirectory, Path.GetDirectoryName(plan.HealthFilePath)!) ||
             IsPathInside(plan.StagingDirectory, Path.GetDirectoryName(plan.HealthFilePath)!) ||
-            IsPathInside(plan.BackupDirectory, Path.GetDirectoryName(plan.HealthFilePath)!))
+            IsPathInside(plan.BackupDirectory, Path.GetDirectoryName(plan.HealthFilePath)!) ||
+            string.IsNullOrWhiteSpace(updatesRoot) ||
+            !IsSamePath(healthDirectory!, Path.Combine(updatesRoot!, "health")) ||
+            !IsSamePath(plan.HealthFilePath, Path.Combine(healthDirectory!, plan.HealthNonce + ".json")) ||
+            !IsPathInside(updatesRoot!, plan.StagingDirectory) ||
+            !IsPathInside(updatesRoot!, plan.BackupDirectory))
         {
             return "UPDATE_PLAN_ROOT_INVALID";
         }
@@ -706,8 +730,27 @@ public sealed class UpdateApplier
             throw new IOException("Required update path does not exist.");
         }
 
+        if (Directory.Exists(full))
+        {
+            if (!SecureFileSystem.IsSafeDirectory(full))
+            {
+                throw new IOException("Update path contains a reparse point.");
+            }
+            return;
+        }
+
+        if (File.Exists(full))
+        {
+            string? parent = Path.GetDirectoryName(full);
+            if (parent is null || !SecureFileSystem.IsSafeFile(full, parent))
+            {
+                throw new IOException("Update path contains a reparse point.");
+            }
+            return;
+        }
+
         string existingPath = full;
-        while (!Directory.Exists(existingPath) && !File.Exists(existingPath))
+        while (!Directory.Exists(existingPath))
         {
             string? parent = Path.GetDirectoryName(existingPath);
             if (string.IsNullOrWhiteSpace(parent) || string.Equals(parent, existingPath, GetPathComparison()))
@@ -718,22 +761,9 @@ public sealed class UpdateApplier
             existingPath = parent;
         }
 
-        FileSystemInfo? current = Directory.Exists(existingPath)
-            ? new DirectoryInfo(existingPath)
-            : new FileInfo(existingPath);
-        while (current is not null)
+        if (!SecureFileSystem.IsSafeDirectory(existingPath))
         {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException("Update path contains a reparse point.");
-            }
-
-            current = current switch
-            {
-                FileInfo file => file.Directory,
-                DirectoryInfo directory => directory.Parent,
-                _ => null,
-            };
+            throw new IOException("Update path contains a reparse point.");
         }
     }
 
@@ -745,24 +775,25 @@ public sealed class UpdateApplier
             throw new UpdateApplyException("UPDATE_PATH_ESCAPE");
         }
 
-        Directory.CreateDirectory(directory);
+        SecureFileSystem.EnsureDirectory(directory, root);
         EnsureNoReparsePath(directory, mustExist: true);
     }
 
-    private static bool HasExpectedFile(string path, PackageFile expected) =>
-        new FileInfo(path).Length == expected.Size &&
+    private static bool HasExpectedFile(string path, PackageFile expected, string root) =>
+        GetFileLength(path, root) == expected.Size &&
         string.Equals(UpdateApplyJournal.Sha256(path), expected.Sha256, StringComparison.OrdinalIgnoreCase);
 
     private static void CopyDurable(string source, string destination, PackageFile expected)
     {
-        using (FileStream input = new(source, FileMode.Open, FileAccess.Read, FileShare.Read))
-        using (FileStream output = new(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.WriteThrough))
-        {
-            input.CopyTo(output);
-            output.Flush(flushToDisk: true);
-        }
+        using Stream input = SecureFileSystem.OpenRead(source, Path.GetDirectoryName(source)!);
+        using Stream output = SecureFileSystem.OpenWrite(
+            destination,
+            FileMode.CreateNew,
+            Path.GetDirectoryName(destination)!);
+        input.CopyTo(output);
+        output.Flush();
 
-        if (!HasExpectedFile(destination, expected))
+        if (!HasExpectedFile(destination, expected, Path.GetDirectoryName(destination)!))
         {
             TryDeleteFile(destination);
             throw new UpdateApplyException("UPDATE_COPY_HASH_MISMATCH");
@@ -773,15 +804,15 @@ public sealed class UpdateApplier
     {
         try
         {
-            File.Move(source, destination);
+            SecureFileSystem.MoveCreate(source, destination);
         }
         catch (IOException)
         {
             CopyDurable(source, destination, expected);
-            File.Delete(source);
+            SecureFileSystem.DeleteFile(source);
         }
 
-        if (!HasExpectedFile(destination, expected))
+        if (!HasExpectedFile(destination, expected, Path.GetDirectoryName(destination)!))
         {
             TryDeleteFile(destination);
             throw new UpdateApplyException("UPDATE_MOVE_HASH_MISMATCH");
@@ -790,9 +821,9 @@ public sealed class UpdateApplier
 
     private static void DeleteHealthFile(string path)
     {
-        if (File.Exists(path))
+        if (SafeFileExists(path, Path.GetDirectoryName(path)!))
         {
-            File.Delete(path);
+            SecureFileSystem.DeleteFile(path, Path.GetDirectoryName(path)!);
         }
     }
 
@@ -815,7 +846,7 @@ public sealed class UpdateApplier
         try
         {
             EnsureNoReparsePath(path, mustExist: true);
-            Directory.Delete(path, recursive: true);
+            SecureFileSystem.DeleteDirectory(path);
         }
         catch (IOException)
         {
@@ -829,9 +860,9 @@ public sealed class UpdateApplier
     {
         try
         {
-            if (File.Exists(path))
+            if (SafeFileExists(path, Path.GetDirectoryName(path)!))
             {
-                File.Delete(path);
+                SecureFileSystem.DeleteFile(path, Path.GetDirectoryName(path)!);
             }
         }
         catch (IOException)
@@ -840,6 +871,45 @@ public sealed class UpdateApplier
         catch (UnauthorizedAccessException)
         {
         }
+    }
+
+    private static bool SafeFileExists(string path, string root)
+    {
+        try
+        {
+            using Stream stream = SecureFileSystem.OpenRead(path, root);
+            return true;
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    private static long GetFileLength(string path, string root)
+    {
+        using Stream stream = SecureFileSystem.OpenRead(path, root);
+        return stream.Length;
+    }
+
+    private static byte[] ReadAllBytes(string path, string root)
+    {
+        using Stream stream = SecureFileSystem.OpenRead(path, root);
+        using MemoryStream buffer = new();
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
     }
 
     private static StringComparison GetPathComparison() =>

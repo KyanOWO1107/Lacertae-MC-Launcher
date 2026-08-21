@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using Lacertae.Application.Downloads;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Problems;
@@ -31,11 +32,12 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
         string path = Path.Combine(rootPath, algorithm!, digest!);
         try
         {
-            if (!File.Exists(path) || HasReparsePointBetween(path, rootPath))
+            if (!SecureFileSystem.IsSafeFile(path, rootPath))
             {
                 return Result<string?>.Success(null);
             }
 
+            using IDisposable rootLease = SecureFileSystem.OpenDirectoryLease(rootPath);
             if (await VerifyAsync(path, artifact, cancellationToken))
             {
                 return Result<string?>.Success(path);
@@ -73,7 +75,7 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
         try
         {
             sourcePath = Path.GetFullPath(verifiedFilePath);
-            if (!File.Exists(sourcePath) || HasReparsePointBetween(sourcePath, Path.GetDirectoryName(sourcePath)!))
+            if (!SecureFileSystem.IsSafeFile(sourcePath, Path.GetDirectoryName(sourcePath)!))
             {
                 return Result<Unit>.Failure(Problem("DOWNLOAD_CACHE_INVALID", artifact));
             }
@@ -84,11 +86,14 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
             }
 
             string directory = Path.Combine(rootPath, algorithm!);
-            Directory.CreateDirectory(directory);
-            if (HasReparsePointBetween(directory, rootPath))
+            SecureFileSystem.EnsureDirectory(directory, rootPath);
+            if (!SecureFileSystem.IsSafeDirectory(directory, rootPath))
             {
                 return Result<Unit>.Failure(Problem("DOWNLOAD_CACHE_INVALID", artifact));
             }
+
+            using IDisposable rootLease = SecureFileSystem.OpenDirectoryLease(rootPath);
+            using IDisposable directoryLease = SecureFileSystem.OpenDirectoryLease(directory, rootPath);
 
             string targetPath = Path.Combine(directory, digest!);
             if (File.Exists(targetPath) && await VerifyAsync(targetPath, artifact, cancellationToken))
@@ -110,7 +115,7 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
                     return Result<Unit>.Failure(Problem("DOWNLOAD_HASH_MISMATCH", artifact));
                 }
 
-                File.Move(temporaryPath, targetPath);
+                SecureFileSystem.MoveCreate(temporaryPath, targetPath, rootPath);
             }
             finally
             {
@@ -135,8 +140,8 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
 
     private static async Task CopyAsync(string sourcePath, string targetPath, CancellationToken cancellationToken)
     {
-        await using FileStream source = new(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        await using FileStream target = new(targetPath, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+        await using Stream source = SecureFileSystem.OpenRead(sourcePath, Path.GetDirectoryName(sourcePath));
+        await using Stream target = SecureFileSystem.OpenWrite(targetPath, FileMode.CreateNew, Path.GetDirectoryName(targetPath));
         byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         try
         {
@@ -147,7 +152,7 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
             }
 
             await target.FlushAsync(cancellationToken);
-            target.Flush(true);
+            target.Flush();
         }
         finally
         {
@@ -160,12 +165,6 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
         DownloadArtifact artifact,
         CancellationToken cancellationToken)
     {
-        FileInfo info = new(path);
-        if (info.Length != artifact.ExpectedSize)
-        {
-            return false;
-        }
-
         Dictionary<string, IncrementalHash> hashes = artifact.Hashes
             .Select(static hash => hash.NormalizedAlgorithm)
             .Distinct(StringComparer.Ordinal)
@@ -176,7 +175,11 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
         byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
         try
         {
-            await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await using Stream stream = SecureFileSystem.OpenRead(path, Path.GetDirectoryName(path));
+            if (stream.Length != artifact.ExpectedSize)
+            {
+                return false;
+            }
             int read;
             while ((read = await stream.ReadAsync(buffer.AsMemory(0, BufferSize), cancellationToken)) > 0)
             {
@@ -256,40 +259,9 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
     private void Quarantine(string path)
     {
         string quarantine = Path.Combine(rootPath, ".quarantine");
-        Directory.CreateDirectory(quarantine);
+        SecureFileSystem.EnsureDirectory(quarantine, rootPath);
         string target = Path.Combine(quarantine, Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N") + ".bad");
-        File.Move(path, target, true);
-    }
-
-    private static bool HasReparsePointBetween(string path, string root)
-    {
-        string normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        FileSystemInfo? current = File.Exists(path)
-            ? new FileInfo(path)
-            : Directory.Exists(path)
-                ? new DirectoryInfo(path)
-                : new DirectoryInfo(Path.GetDirectoryName(path)!);
-        while (current is not null)
-        {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return true;
-            }
-
-            if (string.Equals(Path.TrimEndingDirectorySeparator(current.FullName), normalizedRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                return false;
-            }
-
-            current = current switch
-            {
-                FileInfo file => file.Directory,
-                DirectoryInfo directory => directory.Parent,
-                _ => null,
-            };
-        }
-
-        return true;
+        SecureFileSystem.MoveReplace(path, target, rootPath);
     }
 
     private static void TryDeleteFile(string path)
@@ -298,7 +270,7 @@ public sealed class ContentAddressedArtifactCache : IArtifactCache
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                SecureFileSystem.DeleteFile(path, Path.GetDirectoryName(path));
             }
         }
         catch (IOException)

@@ -181,6 +181,7 @@
       "lacertae.updater": {
         "type": "Project",
         "dependencies": {
+          "Lacertae.Application": "[1.0.0, )",
           "Lacertae.Domain": "[1.0.0, )"
         }
       }

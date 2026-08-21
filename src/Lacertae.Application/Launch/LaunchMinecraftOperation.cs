@@ -29,7 +29,10 @@ public sealed class LaunchMinecraftOperation : IBackgroundOperation
         this.timeProvider = timeProvider ?? TimeProvider.System;
         try
         {
-            frozenPlanJson = JsonSerializer.Serialize(plan, OperationSerialization.JsonOptions);
+            // Durable task records are used for progress/recovery bookkeeping only.
+            // Persist the deliberately secret-free summary instead of the complete
+            // launch plan, which may contain user-supplied JVM/game arguments.
+            frozenPlanJson = JsonSerializer.Serialize(LaunchSummary.From(plan), OperationSerialization.JsonOptions);
         }
         catch (JsonException exception)
         {

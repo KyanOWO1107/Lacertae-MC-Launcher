@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Lacertae.Application.Java;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.GameRoots;
@@ -84,6 +85,11 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
                 request.VersionOverride.Isolation);
             gameDirectory = isolation.IsIsolated ? versionPath : root;
             if (!IsUnderRoot(gameDirectory, root))
+            {
+                return Result<LaunchPlan>.Failure(InvalidProblem("LAUNCH_PLAN_PATH_INVALID"));
+            }
+
+            if (!SecureFileSystem.IsSafeDirectory(root))
             {
                 return Result<LaunchPlan>.Failure(InvalidProblem("LAUNCH_PLAN_PATH_INVALID"));
             }

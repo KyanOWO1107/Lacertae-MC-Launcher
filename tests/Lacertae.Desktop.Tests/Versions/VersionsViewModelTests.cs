@@ -133,19 +133,28 @@ public sealed class VersionsViewModelTests
     public async Task OpenDirectoryUsesOnlyLoadedVersionPath()
     {
         GameRoot root = Root("root", "Root", GameRootAvailability.Available);
+        string versionPath = Path.Combine(root.NormalizedPath, "versions", "1.21.1");
+        Directory.CreateDirectory(versionPath);
         FakeDialogService dialogs = new();
-        VersionsViewModel viewModel = new(
-            new FakeRootRepository([root]),
-            new ListGameVersions(
-                new FakeGameEngine([Descriptor("root", "1.21.1", "1.21.1", "release", false)]),
-                new FakeOverrideRepository()),
-            LauncherSettings.Default,
-            dialogs);
-        await viewModel.LoadAsync(CancellationToken.None);
+        try
+        {
+            VersionsViewModel viewModel = new(
+                new FakeRootRepository([root]),
+                new ListGameVersions(
+                    new FakeGameEngine([Descriptor("root", "1.21.1", "1.21.1", "release", false)]),
+                    new FakeOverrideRepository()),
+                LauncherSettings.Default,
+                dialogs);
+            await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.OpenDirectory(viewModel.Versions[0]);
+            viewModel.OpenDirectory(viewModel.Versions[0]);
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(root.NormalizedPath, "versions", "1.21.1")), dialogs.LastPath);
+            Assert.Equal(Path.GetFullPath(versionPath), dialogs.LastPath);
+        }
+        finally
+        {
+            Directory.Delete(root.NormalizedPath, recursive: true);
+        }
     }
 
     private static GameRoot Root(string id, string name, GameRootAvailability availability) =>
