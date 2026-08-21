@@ -1,6 +1,6 @@
 # Microsoft 登录验收与配置边界
 
-当前阶段完成 Microsoft 公共客户端配置读取、严格校验、Infrastructure 认证适配器边界、Application 账号编排、Windows DPAPI 密钥库、头像内容缓存和 Desktop 多账号页接线；真实 Entra 应用登录仍需维护者提供 Public Client 注册，不把当前构建描述为“已完成正版登录”。
+当前阶段完成 Microsoft 公共客户端配置读取、严格校验、Infrastructure 认证适配器边界、Application 账号编排、Windows DPAPI 密钥库、头像内容缓存和 Desktop 多账号页接线。维护者已完成 Public Client 注册准备，并收到 Mojang AppID allow-list 审核通过通知；真实 Entra 应用登录仍需在 Windows 10/11 私有环境完成实机验收，因此当前构建仍不描述为“已完成正版登录”。
 
 仓库根目录的 `.entra-id` 是维护者从 Entra Portal 导出的本地审核资料，包含显示名称、Application/Client ID、Object ID 和 Tenant ID。它只用于准备 AppID Review 表单，已加入 Git 忽略，不能进入源码、诊断包或发行 ZIP。运行 `eng/prepare-oauth-local.ps1` 会从该资料生成启动器实际读取的 `<可执行文件目录>/oauth.local.json`；运行时文件只包含 `clientId` 和固定 `consumers` authority，不复制 Tenant ID、Object ID 或任何 secret。
 
@@ -48,7 +48,7 @@
 | 认证结果不暴露 token，缓存材料可清零 | PASS | `CmlLibMicrosoftIdentityClientTests.SuccessfulBackendResultMapsToLacertaeOnlySessionAndRedactsSecrets` |
 | 添加账号先写秘密、数据库失败后清理；刷新仅在成功后替换缓存 | PASS | `AccountSessionOrchestrationTests.AddMicrosoftWritesSecretBeforeProfileAndCleansItWhenProfileWriteFails`、`RefreshWritesRotatedCacheOnlyAfterSuccessfulRefresh` |
 | 版本账号覆盖优先且无有效选择时不静默降级 | PASS | `AccountSessionOrchestrationTests.ResolvePrefersActiveVersionOverrideOverActiveDefault`、`ResolveReturnsAccountRequiredForMissingOrInactiveSelection` |
-| 真实 Entra 应用注册、浏览器回调和 Java Edition 资料 | BLOCKED | 尚未提供 Lacertae 自有 Public Client 注册 |
+| 真实 Entra 应用注册、浏览器回调和 Java Edition 资料 | NOT RUN | Public Client 已准备且收到 Mojang allow-list 通过通知；尚未完成 Windows 10/11 实机登录验收 |
 | MSAL 静默刷新编排和 Windows DPAPI 缓存 | PASS | `AccountSessionOrchestrationTests`、`DpapiSecretVaultTests` 覆盖刷新写入顺序、`LCSV` 密文、篡改失败、原子替换和当前用户 ACL |
 | 头像下载和本地缓存不影响账号流程 | PASS | `PngValidatorTests`、`HttpAvatarCacheTests` 覆盖可信域名、重定向、内容类型、1 MiB 限制、PNG CRC/解压边界和占位回退 |
 | Desktop 账号页只绑定本地头像路径，默认/版本覆盖更新摘要且登录可取消 | PASS | `AccountsViewModelTests`、`MainWindowTests.ConfiguredAccountsRouteRendersDedicatedAccountPanel` |
@@ -65,7 +65,7 @@ dotnet test tests/Lacertae.Desktop.Tests/Lacertae.Desktop.Tests.csproj -c Releas
 dotnet test tests/Lacertae.Infrastructure.Tests/Lacertae.Infrastructure.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~CmlLibMicrosoftIdentityClientTests
 ```
 
-真实登录验收前，维护者必须提供本地公共 Client ID，并在 Microsoft Entra 的 **Mobile and desktop applications** 平台登记精确的 `http://localhost`。不得把 `oauth.local.json`、令牌、缓存、账号资料或登录截图提交到 Git、诊断包或发布 ZIP。
+真实登录验收前，维护者必须确认 allow-listed AppID 与 `.entra-id` 中的 Client ID 相同，并在 Microsoft Entra 的 **Mobile and desktop applications** 平台登记精确的 `http://localhost`。不得把 `oauth.local.json`、令牌、缓存、账号资料或登录截图提交到 Git、诊断包或发布 ZIP。
 
 准备本地测试配置（不会修改仓库源码）：
 

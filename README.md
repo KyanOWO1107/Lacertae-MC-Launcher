@@ -28,7 +28,7 @@ Lacertae 是一个 Windows 10/11 优先、保留跨平台服务抽象的 Minecra
 - Avalonia 桌面壳、主题/可访问性基础和非阻塞更新提示；
 - Windows x64 便携版构建、包内文件清单、SHA-256 校验、SBOM 和第三方声明。
 
-以下能力仍属于后续里程碑：Forge/Fabric/NeoForge、Mod/材质包在线资源、整合包、第三方统一通行证、主页模块导入、完整 Microsoft 登录生产验收，以及 macOS/Linux 发行。Microsoft 真实登录仍需维护者提供自有 Entra Public Client 注册后进行实机验收。
+以下能力仍属于后续里程碑：Forge/Fabric/NeoForge、Mod/材质包在线资源、整合包、第三方统一通行证、主页模块导入、完整 Microsoft 登录生产验收，以及 macOS/Linux 发行。Microsoft Public Client 已完成注册准备，Mojang AppID allow-list 审核已收到通过通知；真实登录仍需在 Windows 10/11 私有环境完成实机验收。
 
 ## 开发环境与验证
 
