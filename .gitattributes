@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+*.7z binary
+*.db binary
+*.dll binary
+*.dmp binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.nupkg binary
+*.p12 binary
+*.pfx binary
+*.png binary
+*.snupkg binary
+*.zip binary
