@@ -5,6 +5,7 @@ using Lacertae.Domain.Install;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
+using Lacertae.Domain.Versions;
 
 namespace Lacertae.Application.Install;
 
@@ -219,7 +220,7 @@ public sealed class RecoverVanillaInstalls(
             !string.Equals(record.Plan.OperationId, record.Journal.OperationId, StringComparison.Ordinal) ||
             !string.Equals(record.Plan.GameRootId, record.Journal.GameRootId, StringComparison.Ordinal) ||
             !string.Equals(record.Plan.VersionId, record.Journal.VersionId, StringComparison.Ordinal) ||
-            !IsSafeSegment(record.Plan.OperationId) || !IsSafeSegment(record.Plan.GameRootId) || !IsSafeSegment(record.Plan.VersionId))
+            !IsSafeSegment(record.Plan.OperationId) || !IsSafeSegment(record.Plan.GameRootId) || !VersionFolderPolicy.IsSafe(record.Plan.VersionId))
         {
             return false;
         }

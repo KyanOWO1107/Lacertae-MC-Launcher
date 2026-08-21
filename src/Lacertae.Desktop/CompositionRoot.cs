@@ -149,6 +149,7 @@ public sealed class CompositionRoot : IDisposable
     {
         ArgumentNullException.ThrowIfNull(state);
         SqliteConnectionFactory connectionFactory = new(state.DataRoot.DatabasePath);
+        SqliteGameRootRepository gameRootRepository = new(connectionFactory);
         SqliteVersionOverrideRepository versionOverrides = new(connectionFactory);
         ListGameVersions listGameVersions = new(new CmlLibGameEngine(), versionOverrides);
         JsonSettingsRepository settingsRepository = new(state.DataRoot.SettingsPath);
@@ -186,7 +187,7 @@ public sealed class CompositionRoot : IDisposable
             }
         }
         VersionsViewModel versions = new(
-            new SqliteGameRootRepository(connectionFactory),
+            gameRootRepository,
             listGameVersions,
             state.Settings,
             services.GetRequiredService<IPlatformDialogService>(),
@@ -222,7 +223,8 @@ public sealed class CompositionRoot : IDisposable
             state.GameRoots,
             selectedRoot,
             state.Settings,
-            settingsRepository);
+            settingsRepository,
+            gameRootRepository);
 
         MainWindowViewModel mainWindow = services.GetRequiredService<MainWindowViewModel>();
         JavaArchitecture preferredArchitecture = Environment.Is64BitOperatingSystem

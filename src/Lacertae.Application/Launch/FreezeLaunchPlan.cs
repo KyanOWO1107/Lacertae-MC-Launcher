@@ -317,7 +317,7 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
         !string.IsNullOrWhiteSpace(request.GameRoot.NormalizedPath) &&
         request.GameRoot.Availability == GameRootAvailability.Available &&
         string.Equals(request.Version.GameRootId, request.GameRoot.Id, StringComparison.Ordinal) &&
-        IsSafeSegment(request.Version.FolderName) &&
+        VersionFolderPolicy.IsSafe(request.Version.FolderName) &&
         string.Equals(request.VersionOverride.GameRootId, request.GameRoot.Id, StringComparison.Ordinal) &&
         string.Equals(request.VersionOverride.VersionFolder, request.Version.FolderName, StringComparison.Ordinal);
 
@@ -328,10 +328,6 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
         return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
             normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsSafeSegment(string value) =>
-        !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && value is not "." and not ".." &&
-        value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     private static Problem InvalidProblem(string code) => new(
         code,

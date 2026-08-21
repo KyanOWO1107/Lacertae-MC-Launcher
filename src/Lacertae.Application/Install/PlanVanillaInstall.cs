@@ -3,6 +3,7 @@ using Lacertae.Domain.GameRoots;
 using Lacertae.Domain.Install;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
+using Lacertae.Domain.Versions;
 
 namespace Lacertae.Application.Install;
 
@@ -24,7 +25,7 @@ public sealed class PlanVanillaInstall(
         ArgumentNullException.ThrowIfNull(platform);
         ArgumentNullException.ThrowIfNull(metadataSource);
         if (string.IsNullOrWhiteSpace(gameRoot.Id) || string.IsNullOrWhiteSpace(gameRoot.NormalizedPath) ||
-            !IsSafeSegment(versionId) || !Enum.IsDefined(action) ||
+            !VersionFolderPolicy.IsSafe(versionId) || !Enum.IsDefined(action) ||
             string.IsNullOrWhiteSpace(platform.OsName) || string.IsNullOrWhiteSpace(platform.Architecture))
         {
             return Result<VanillaInstallPlan>.Failure(InvalidProblem());
@@ -51,7 +52,7 @@ public sealed class PlanVanillaInstall(
 
         VanillaMetadataSnapshot metadata = metadataResult.Value;
         if (!string.Equals(metadata.VersionId, versionId, StringComparison.Ordinal) ||
-            !IsSafeSegment(metadata.VersionId) ||
+            !VersionFolderPolicy.IsSafe(metadata.VersionId) ||
             string.IsNullOrWhiteSpace(metadata.VersionType) ||
             metadata.LibraryArtifacts is null || metadata.AssetObjectArtifacts is null)
         {
@@ -201,10 +202,6 @@ public sealed class PlanVanillaInstall(
             : root + Path.DirectorySeparatorChar;
         return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsSafeSegment(string value) =>
-        value.Length <= 128 && value is not "." and not ".." &&
-        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     private static bool IsSafeRelativePath(string path) =>
         !string.IsNullOrWhiteSpace(path) && !path.StartsWith('/') && !path.Contains(':') &&

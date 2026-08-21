@@ -6,6 +6,7 @@ using Lacertae.Domain.Install;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
+using Lacertae.Domain.Versions;
 
 namespace Lacertae.Application.Install;
 
@@ -349,7 +350,7 @@ public sealed class ExecuteVanillaInstall
         problem = null;
         if (string.IsNullOrWhiteSpace(plan.OperationId) || string.IsNullOrWhiteSpace(plan.GameRootId) ||
             string.IsNullOrWhiteSpace(plan.VersionId) || !IsSafeSegment(plan.OperationId) || !IsSafeSegment(plan.GameRootId) ||
-            !IsSafeSegment(plan.VersionId) || plan.Artifacts is null || plan.Artifacts.Any(static artifact => artifact is null))
+            !VersionFolderPolicy.IsSafe(plan.VersionId) || plan.Artifacts is null || plan.Artifacts.Any(static artifact => artifact is null))
         {
             problem = Problem("INSTALL_PLAN_INVALID");
             return false;

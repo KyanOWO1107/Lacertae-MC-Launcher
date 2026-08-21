@@ -1,4 +1,5 @@
 using System.Globalization;
+using Lacertae.Application.GameRoots;
 using Lacertae.Application.Install;
 using Lacertae.Application.Settings;
 using Lacertae.Desktop.ViewModels.Downloads;
@@ -174,6 +175,31 @@ public sealed class VanillaDownloadsViewModelTests
         Assert.Equal(2, catalog.CallCount);
     }
 
+    [Fact]
+    public async Task LoadRefreshesRootListAndSelectedRootAfterOnboardingAddsRoot()
+    {
+        MutableRootRepository roots = new();
+        FakeSettingsRepository settings = new(LauncherSettings.Default);
+        using VanillaDownloadsViewModel viewModel = new(
+            new FakeCatalog([]),
+            settings: LauncherSettings.Default,
+            settingsRepository: settings,
+            gameRootRepository: roots);
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        GameRoot first = Root("root-a", "A");
+        GameRoot second = Root("root-b", "B");
+        roots.Values.Add(first);
+        roots.Values.Add(second);
+        settings.Current = LauncherSettings.Default with { SelectedGameRootId = second.Id };
+
+        await viewModel.LoadAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([first.Id, second.Id], viewModel.GameRoots.Select(static root => root.Id));
+        Assert.Equal(second.Id, viewModel.SelectedRoot?.Id);
+    }
+
     private static GameRoot Root(string id, string displayName) =>
         new(id, Path.Combine(Path.GetTempPath(), "lacertae-downloads-" + id), displayName, GameRootAvailability.Available, null);
 
@@ -213,9 +239,34 @@ public sealed class VanillaDownloadsViewModelTests
         }
     }
 
+    private sealed class MutableRootRepository : IGameRootRepository
+    {
+        public List<GameRoot> Values { get; } = [];
+
+        public Task<IReadOnlyList<GameRoot>> GetAllAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<GameRoot>>(Values.ToArray());
+
+        public Task<GameRoot?> FindByNormalizedPathAsync(string normalizedPath, CancellationToken cancellationToken) =>
+            Task.FromResult(Values.FirstOrDefault(root => root.NormalizedPath == normalizedPath));
+
+        public Task<Result<Unit>> UpsertAsync(GameRoot gameRoot, CancellationToken cancellationToken)
+        {
+            Values.RemoveAll(root => root.Id == gameRoot.Id);
+            Values.Add(gameRoot);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result<Unit>> RemoveAsync(string id, CancellationToken cancellationToken)
+        {
+            Values.RemoveAll(root => root.Id == id);
+            return Task.FromResult(Result.Success());
+        }
+    }
+
     private sealed class FakeSettingsRepository : ISettingsRepository
     {
         private readonly Result<Unit> saveResult;
+        public LauncherSettings Current { get; set; }
 
         public FakeSettingsRepository(LauncherSettings initial)
             : this(initial, Result.Success())
@@ -224,6 +275,7 @@ public sealed class VanillaDownloadsViewModelTests
 
         public FakeSettingsRepository(LauncherSettings initial, Result<Unit> saveResult)
         {
+            Current = initial;
             this.saveResult = saveResult;
         }
 
@@ -232,11 +284,12 @@ public sealed class VanillaDownloadsViewModelTests
         public LauncherSettings? LastSaved { get; private set; }
 
         public Task<Result<LauncherSettings>> LoadAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(Result<LauncherSettings>.Success(LauncherSettings.Default));
+            Task.FromResult(Result<LauncherSettings>.Success(Current));
 
         public Task<Result<Unit>> SaveAsync(LauncherSettings settings, CancellationToken cancellationToken)
         {
             LastSaved = settings;
+            Current = settings;
             LastSave.TrySetResult(true);
             return Task.FromResult(saveResult);
         }
