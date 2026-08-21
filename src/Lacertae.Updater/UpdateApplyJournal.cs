@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lacertae.Application.Storage;
 
 namespace Lacertae.Updater;
 
@@ -103,23 +104,10 @@ public sealed class UpdateApplyJournal
             throw new IOException("Journal has no parent directory.");
         }
 
-        Directory.CreateDirectory(directory);
-        string temporaryPath = path + ".tmp";
+        SecureFileSystem.EnsureDirectory(directory);
         UpdateApplyJournalDocument document = new(CurrentSchemaVersion, state, entries.ToArray());
         byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(document, JsonOptions);
-        using (FileStream stream = new(
-            temporaryPath,
-            FileMode.Create,
-            FileAccess.Write,
-            FileShare.None,
-            4096,
-            FileOptions.WriteThrough))
-        {
-            stream.Write(bytes);
-            stream.Flush(flushToDisk: true);
-        }
-
-        File.Move(temporaryPath, path, overwrite: true);
+        SecureFileSystem.WriteAtomically(path, bytes, directory);
     }
 
     public static UpdateApplyJournal Load(string path)
@@ -130,7 +118,16 @@ public sealed class UpdateApplyJournal
             return journal;
         }
 
-        byte[] bytes = File.ReadAllBytes(journal.path);
+        string parent = System.IO.Path.GetDirectoryName(journal.path)!;
+        if (!SecureFileSystem.IsSafeFile(journal.path, parent))
+        {
+            throw new InvalidDataException("Update journal path is not a regular file.");
+        }
+
+        using Stream stream = SecureFileSystem.OpenRead(journal.path, parent);
+        using MemoryStream buffer = new();
+        stream.CopyTo(buffer);
+        byte[] bytes = buffer.ToArray();
         UpdateApplyJournalDocument? document = JsonSerializer.Deserialize<UpdateApplyJournalDocument>(bytes, JsonOptions);
         if (document is null || document.SchemaVersion != CurrentSchemaVersion ||
             string.IsNullOrWhiteSpace(document.State))
@@ -145,7 +142,7 @@ public sealed class UpdateApplyJournal
 
     public static string Sha256(string path)
     {
-        using FileStream stream = File.OpenRead(path);
+        using Stream stream = SecureFileSystem.OpenRead(path, System.IO.Path.GetDirectoryName(path)!);
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 }

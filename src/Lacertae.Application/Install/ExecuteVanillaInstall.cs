@@ -1,10 +1,12 @@
 using Lacertae.Application.Downloads;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Install;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
+using Lacertae.Domain.Versions;
 
 namespace Lacertae.Application.Install;
 
@@ -66,6 +68,7 @@ public sealed class ExecuteVanillaInstall
             return preflight;
         }
 
+        using IDisposable rootLease = SecureFileSystem.OpenDirectoryLease(root);
         List<InstallMove> moves = [];
         Dictionary<string, DownloadArtifact> artifactsByPath = plan.Artifacts.ToDictionary(
             static artifact => artifact.RelativeDestinationPath,
@@ -134,7 +137,7 @@ public sealed class ExecuteVanillaInstall
         }
 
         string stagingRoot = ResolvePath(root, $".lacertae/staging/{plan.OperationId}");
-        Directory.CreateDirectory(stagingRoot);
+        SecureFileSystem.EnsureDirectory(stagingRoot, root);
         for (int index = 0; index < moves.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -238,17 +241,17 @@ public sealed class ExecuteVanillaInstall
                 if (move.QuarantineRelativePath is not null && File.Exists(finalPath))
                 {
                     string quarantinePath = ResolvePath(root, move.QuarantineRelativePath);
-                    Directory.CreateDirectory(Path.GetDirectoryName(quarantinePath)!);
+                    SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(quarantinePath)!, root);
                     if (File.Exists(quarantinePath) || Directory.Exists(quarantinePath))
                     {
                         return await MarkRollbackRequiredAsync(plan, journal, "INSTALL_COMMIT_CONFLICT");
                     }
 
-                    File.Move(finalPath, quarantinePath);
+                    SecureFileSystem.MoveCreate(finalPath, quarantinePath, root);
                 }
 
-                Directory.CreateDirectory(Path.GetDirectoryName(finalPath)!);
-                File.Move(stagedPath, finalPath);
+                SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(finalPath)!, root);
+                SecureFileSystem.MoveCreate(stagedPath, finalPath, root);
                 moves[moveIndex] = move with { Applied = true };
                 journal = journal with { Moves = moves.ToArray(), UpdatedUtc = timeProvider.GetUtcNow() };
                 saved = await journalRepository.SaveAsync(plan, journal, CancellationToken.None);
@@ -347,7 +350,7 @@ public sealed class ExecuteVanillaInstall
         problem = null;
         if (string.IsNullOrWhiteSpace(plan.OperationId) || string.IsNullOrWhiteSpace(plan.GameRootId) ||
             string.IsNullOrWhiteSpace(plan.VersionId) || !IsSafeSegment(plan.OperationId) || !IsSafeSegment(plan.GameRootId) ||
-            !IsSafeSegment(plan.VersionId) || plan.Artifacts is null || plan.Artifacts.Any(static artifact => artifact is null))
+            !VersionFolderPolicy.IsSafe(plan.VersionId) || plan.Artifacts is null || plan.Artifacts.Any(static artifact => artifact is null))
         {
             problem = Problem("INSTALL_PLAN_INVALID");
             return false;
@@ -462,7 +465,7 @@ public sealed class ExecuteVanillaInstall
         {
             if (Directory.Exists(path))
             {
-                Directory.Delete(path, recursive: true);
+                SecureFileSystem.DeleteDirectory(path);
             }
         }
         catch (IOException)

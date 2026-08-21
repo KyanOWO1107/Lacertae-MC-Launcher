@@ -1,6 +1,7 @@
 using System.Formats.Tar;
 using System.IO.Compression;
 using Lacertae.Application.Archives;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Operations;
 using Lacertae.Domain.Problems;
@@ -37,6 +38,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
             destinationExisted = Directory.Exists(destination);
             ValidateArchivePath(archivePath);
             EnsureDestination(destination);
+            using IDisposable destinationLease = SecureFileSystem.OpenDirectoryLease(destination);
             if (!destinationExisted)
             {
                 createdDirectories.Add(destination);
@@ -141,13 +143,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
         ExtractionState state,
         CancellationToken cancellationToken)
     {
-        await using FileStream stream = new(
-            archivePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            BufferSize,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using Stream stream = SecureFileSystem.OpenRead(archivePath, Path.GetDirectoryName(archivePath));
         using ZipArchive archive = new(stream, ZipArchiveMode.Read, leaveOpen: false);
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
@@ -211,13 +207,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
         ExtractionState state,
         CancellationToken cancellationToken)
     {
-        await using FileStream stream = new(
-            archivePath,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.Read,
-            BufferSize,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using Stream stream = SecureFileSystem.OpenRead(archivePath, Path.GetDirectoryName(archivePath));
         using TarReader reader = new(stream, leaveOpen: false);
         TarEntry? entry;
         while ((entry = reader.GetNextEntry(copyData: false)) is not null)
@@ -302,13 +292,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
             throw new ArchiveExtractionException("ARCHIVE_ENTRY_CONFLICT");
         }
 
-        await using FileStream output = new(
-            target,
-            FileMode.CreateNew,
-            FileAccess.Write,
-            FileShare.None,
-            BufferSize,
-            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using Stream output = SecureFileSystem.OpenWrite(target, FileMode.CreateNew, destination);
         createdFiles.Add(target);
         long written = 0;
         byte[] buffer = new byte[BufferSize];
@@ -347,7 +331,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
         }
 
         await output.FlushAsync(cancellationToken);
-        output.Flush(true);
+        output.Flush();
         files.Add(relativePath);
     }
 
@@ -371,8 +355,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
             return;
         }
 
-        Directory.CreateDirectory(target);
-        EnsureNotReparse(target, destination);
+        SecureFileSystem.EnsureDirectory(target, destination);
         createdDirectories.Add(target);
         directories.Add(relativePath);
     }
@@ -400,7 +383,6 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
         foreach (string segment in relativeParent.Split('/', StringSplitOptions.RemoveEmptyEntries))
         {
             current = Path.Combine(current, segment);
-            EnsureNotReparse(current, destination);
             if (File.Exists(current))
             {
                 throw new ArchiveExtractionException("ARCHIVE_ENTRY_CONFLICT");
@@ -408,8 +390,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
 
             if (!Directory.Exists(current))
             {
-                Directory.CreateDirectory(current);
-                EnsureNotReparse(current, destination);
+                SecureFileSystem.EnsureDirectory(current, destination);
                 createdDirectories.Add(current);
             }
 
@@ -536,7 +517,8 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
 
     private static void ValidateArchivePath(string archivePath)
     {
-        if (!File.Exists(archivePath) || (File.GetAttributes(archivePath) & FileAttributes.ReparsePoint) != 0)
+        string? parent = Path.GetDirectoryName(archivePath);
+        if (parent is null || !SecureFileSystem.IsSafeFile(archivePath, parent))
         {
             throw new ArchiveExtractionException("ARCHIVE_REQUEST_INVALID");
         }
@@ -550,8 +532,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
             throw new ArchiveExtractionException("ARCHIVE_REQUEST_INVALID");
         }
 
-        Directory.CreateDirectory(destination);
-        EnsureNotReparse(destination, parent);
+        SecureFileSystem.EnsureDirectory(destination);
     }
 
     private static void EnsureNotReparse(string path, string root)
@@ -628,7 +609,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
             {
                 if (Directory.Exists(path) && !File.Exists(path))
                 {
-                    Directory.Delete(path, recursive: false);
+                    SecureFileSystem.DeleteDirectory(path);
                 }
             }
             catch (IOException)
@@ -646,7 +627,7 @@ public sealed class BoundedArchiveExtractor : IArchiveExtractor
         {
             if (File.Exists(path))
             {
-                File.Delete(path);
+                SecureFileSystem.DeleteFile(path);
             }
         }
         catch (IOException)

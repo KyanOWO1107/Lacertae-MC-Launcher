@@ -272,6 +272,18 @@ public sealed class VersionsViewModel : INotifyPropertyChanged, IDisposable
 
         try
         {
+            if (settingsRepository is not null)
+            {
+                Result<LauncherSettings> loadedSettings = await settingsRepository.LoadAsync(cancellationToken);
+                if (!loadedSettings.IsSuccess)
+                {
+                    SetError("GAME_ROOT_SETTINGS_LOAD_FAILED", "无法读取游戏根目录设置，请重试。");
+                    return;
+                }
+
+                settings = loadedSettings.Value;
+            }
+
             gameRoots = (await gameRootRepository.GetAllAsync(cancellationToken))
                 .OrderBy(static root => root.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(static root => root.Id, StringComparer.Ordinal)

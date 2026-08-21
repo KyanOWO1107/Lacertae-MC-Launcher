@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Lacertae.Application.Archives;
 using Lacertae.Application.Downloads;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Operations;
@@ -71,13 +72,14 @@ public sealed class StageUpdate
         try
         {
             string updatesPath = Path.GetFullPath(request.UpdatesPath);
-            EnsureSafeDirectory(updatesPath);
+            SecureFileSystem.EnsureDirectory(updatesPath);
+            using IDisposable updatesLease = SecureFileSystem.OpenDirectoryLease(updatesPath);
             string downloadsPath = Path.Combine(updatesPath, "downloads");
-            Directory.CreateDirectory(downloadsPath);
-            EnsureSafeDirectory(downloadsPath, updatesPath);
+            SecureFileSystem.EnsureDirectory(downloadsPath, updatesPath);
+            using IDisposable downloadsLease = SecureFileSystem.OpenDirectoryLease(downloadsPath, updatesPath);
             string stagingRoot = Path.Combine(updatesPath, "staging");
-            Directory.CreateDirectory(stagingRoot);
-            EnsureSafeDirectory(stagingRoot, updatesPath);
+            SecureFileSystem.EnsureDirectory(stagingRoot, updatesPath);
+            using IDisposable stagingRootLease = SecureFileSystem.OpenDirectoryLease(stagingRoot, updatesPath);
 
             DownloadArtifact artifact = DownloadArtifact.Create(
                 ArtifactKind.LauncherUpdatePackage,
@@ -100,16 +102,19 @@ public sealed class StageUpdate
             }
 
             if (!IsSafeFile(downloaded.Value.VerifiedFilePath, downloadsPath) ||
-                new FileInfo(downloaded.Value.VerifiedFilePath).Length != artifact.ExpectedSize ||
-                !await HasSha256Async(downloaded.Value.VerifiedFilePath, artifact.Hashes[0].NormalizedHexDigest, cancellationToken))
+                !await HasSha256Async(
+                    downloaded.Value.VerifiedFilePath,
+                    artifact.Hashes[0].NormalizedHexDigest,
+                    artifact.ExpectedSize,
+                    cancellationToken))
             {
                 return Failure<StagedUpdate>("UPDATE_PACKAGE_HASH_MISMATCH", request.CorrelationId);
             }
 
             string stagingName = request.Update.Manifest.Version + "-" + Guid.NewGuid().ToString("N");
             stagingPath = Path.Combine(stagingRoot, stagingName);
-            Directory.CreateDirectory(stagingPath);
-            EnsureSafeDirectory(stagingPath, stagingRoot);
+            SecureFileSystem.EnsureDirectory(stagingPath, stagingRoot);
+            using IDisposable stagingLease = SecureFileSystem.OpenDirectoryLease(stagingPath, stagingRoot);
             Result<Unit> extracted = await extractor.ExtractAsync(
                 new ArchiveExtractionRequest(
                     downloaded.Value.VerifiedFilePath,
@@ -136,17 +141,11 @@ public sealed class StageUpdate
 
             string signedManifestPath = Path.Combine(stagingPath, "signed-manifest.json");
             string signaturePath = Path.Combine(stagingPath, "signed-manifest.sig");
-            await File.WriteAllBytesAsync(signedManifestPath, request.Update.CanonicalBytes, cancellationToken);
-            await File.WriteAllBytesAsync(signaturePath, request.Update.Signature, cancellationToken);
+            await SecureFileSystem.WriteAtomicallyAsync(signedManifestPath, request.Update.CanonicalBytes, cancellationToken);
+            await SecureFileSystem.WriteAtomicallyAsync(signaturePath, request.Update.Signature, cancellationToken);
             string relativeStagingPath = Path.GetRelativePath(updatesPath, stagingPath).Replace(Path.DirectorySeparatorChar, '/');
             string metadataPath = Path.Combine(updatesPath, "staged-update.json");
-            string metadataTemporaryPath = metadataPath + ".tmp";
             if (File.Exists(metadataPath) && !IsSafeFile(metadataPath, updatesPath))
-            {
-                return Failure<StagedUpdate>("UPDATE_STAGE_INVALID", request.CorrelationId);
-            }
-
-            if (File.Exists(metadataTemporaryPath) && !IsSafeFile(metadataTemporaryPath, updatesPath))
             {
                 return Failure<StagedUpdate>("UPDATE_STAGE_INVALID", request.CorrelationId);
             }
@@ -159,11 +158,8 @@ public sealed class StageUpdate
                 "signed-manifest.json",
                 "signed-manifest.sig",
                 request.Update.Manifest.Package.FileManifestSha256);
-            await File.WriteAllTextAsync(
-                metadataTemporaryPath,
-                JsonSerializer.Serialize(metadata, JsonOptions),
-                cancellationToken);
-            File.Move(metadataTemporaryPath, metadataPath, overwrite: true);
+            byte[] metadataBytes = JsonSerializer.SerializeToUtf8Bytes(metadata, JsonOptions);
+            await SecureFileSystem.WriteAtomicallyAsync(metadataPath, metadataBytes, cancellationToken);
             return Result<StagedUpdate>.Success(new StagedUpdate(
                 request.Update.Manifest.Version,
                 relativeStagingPath,
@@ -217,12 +213,15 @@ public sealed class StageUpdate
             return Failure<Unit>("UPDATE_PACKAGE_MANIFEST_INVALID", "update-package");
         }
 
-        if (new FileInfo(manifestPath).Length > MaximumPackageManifestBytes)
+        await using Stream manifestStream = SecureFileSystem.OpenRead(manifestPath, stagingPath);
+        if (manifestStream.Length > MaximumPackageManifestBytes)
         {
             return Failure<Unit>("UPDATE_PACKAGE_MANIFEST_INVALID", "update-package");
         }
 
-        byte[] manifestBytes = await File.ReadAllBytesAsync(manifestPath, cancellationToken);
+        using MemoryStream manifestBuffer = new();
+        await manifestStream.CopyToAsync(manifestBuffer, cancellationToken);
+        byte[] manifestBytes = manifestBuffer.ToArray();
         string actualManifestHash = Convert.ToHexString(SHA256.HashData(manifestBytes)).ToLowerInvariant();
         if (!string.Equals(actualManifestHash, expectedManifestHash, StringComparison.OrdinalIgnoreCase))
         {
@@ -290,11 +289,11 @@ public sealed class StageUpdate
                 continue;
             }
 
-            FileInfo info = new(filePath);
-            await using FileStream stream = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            await using Stream stream = SecureFileSystem.OpenRead(filePath, stagingPath);
+            long fileSize = stream.Length;
             string hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
             if (!actualPaths.TryAdd(relative, hash) || !expected.TryGetValue(relative, out PackageFile? expectedFile) ||
-                expectedFile.Size != info.Length || !string.Equals(expectedFile.Sha256, hash, StringComparison.Ordinal))
+                expectedFile.Size != fileSize || !string.Equals(expectedFile.Sha256, hash, StringComparison.Ordinal))
             {
                 return Failure<Unit>("UPDATE_PACKAGE_FILE_MISMATCH", "update-package");
             }
@@ -347,77 +346,21 @@ public sealed class StageUpdate
 
     private static bool IsSafeFile(string path, string root)
     {
-        string fullPath = Path.GetFullPath(path);
-        string fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        string prefix = fullRoot + Path.DirectorySeparatorChar;
-        if (!fullPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+        return SecureFileSystem.IsSafeFile(path, root);
+    }
+
+    private static async Task<bool> HasSha256Async(
+        string path,
+        string expected,
+        long expectedSize,
+        CancellationToken cancellationToken)
+    {
+        await using Stream stream = SecureFileSystem.OpenRead(path);
+        if (stream.Length != expectedSize)
         {
             return false;
         }
 
-        FileSystemInfo? current = new FileInfo(fullPath);
-        while (current is not null)
-        {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                return false;
-            }
-
-            string currentPath = Path.TrimEndingDirectorySeparator(current.FullName);
-            if (string.Equals(currentPath, fullRoot, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            current = current switch
-            {
-                FileInfo file => file.Directory,
-                DirectoryInfo directory => directory.Parent,
-                _ => null,
-            };
-        }
-
-        return false;
-    }
-
-    private static void EnsureSafeDirectory(string path, string? root = null)
-    {
-        string fullPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-        if (!Directory.Exists(fullPath))
-        {
-            throw new IOException("Update staging directory is unavailable.");
-        }
-
-        if (root is not null)
-        {
-            string fullRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-            if (!fullPath.StartsWith(fullRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new IOException("Update staging path escaped its root.");
-            }
-        }
-
-        FileSystemInfo? current = new DirectoryInfo(fullPath);
-        while (current is not null)
-        {
-            if ((current.Attributes & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new IOException("Update staging path contains a reparse point.");
-            }
-
-            string currentPath = Path.TrimEndingDirectorySeparator(current.FullName);
-            if (root is not null && string.Equals(currentPath, Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)), StringComparison.OrdinalIgnoreCase))
-            {
-                break;
-            }
-
-            current = current is DirectoryInfo directory ? directory.Parent : null;
-        }
-    }
-
-    private static async Task<bool> HasSha256Async(string path, string expected, CancellationToken cancellationToken)
-    {
-        await using FileStream stream = new(path, FileMode.Open, FileAccess.Read, FileShare.Read);
         string actual = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
@@ -433,7 +376,7 @@ public sealed class StageUpdate
         {
             if (Directory.Exists(path))
             {
-                Directory.Delete(path, recursive: true);
+                SecureFileSystem.DeleteDirectory(path);
             }
         }
         catch (IOException)

@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using System.Windows.Input;
+using Lacertae.Application.GameRoots;
 using Lacertae.Application.Install;
 using Lacertae.Application.Settings;
 using Lacertae.Domain.Common;
@@ -57,6 +58,7 @@ public sealed class VanillaDownloadsViewModel : INotifyPropertyChanged, IDisposa
     private readonly AsyncCommand refreshCommand;
     private readonly DelegateCommand cancelInstallCommand;
     private readonly ISettingsRepository? settingsRepository;
+    private readonly IGameRootRepository? gameRootRepository;
     private readonly SemaphoreSlim settingsSaveGate = new(1, 1);
     private LauncherSettings? settings;
     private IReadOnlyList<GameRoot> gameRoots = [];
@@ -80,7 +82,8 @@ public sealed class VanillaDownloadsViewModel : INotifyPropertyChanged, IDisposa
         IReadOnlyList<GameRoot>? gameRoots = null,
         GameRoot? selectedRoot = null,
         LauncherSettings? settings = null,
-        ISettingsRepository? settingsRepository = null)
+        ISettingsRepository? settingsRepository = null,
+        IGameRootRepository? gameRootRepository = null)
     {
         this.catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         planInstall = plan;
@@ -95,6 +98,7 @@ public sealed class VanillaDownloadsViewModel : INotifyPropertyChanged, IDisposa
 
         this.settings = settings;
         this.settingsRepository = settingsRepository;
+        this.gameRootRepository = gameRootRepository;
         refreshCommand = new AsyncCommand(
             () => LoadAsync(CancellationToken.None),
             () => !IsLoading);
@@ -289,6 +293,15 @@ public sealed class VanillaDownloadsViewModel : INotifyPropertyChanged, IDisposa
         ErrorMessage = null;
         try
         {
+            Result<Unit> selectionState = await ReloadSelectionStateAsync(cancellationToken);
+            if (!selectionState.IsSuccess)
+            {
+                SetError(
+                    selectionState.Problem?.Code ?? "GAME_ROOT_SETTINGS_LOAD_FAILED",
+                    "无法读取游戏根目录设置，请重试。");
+                return;
+            }
+
             Result<IReadOnlyList<VanillaVersionSummary>> result = await catalog.ListAsync(cancellationToken);
             if (!result.IsSuccess)
             {
@@ -326,6 +339,49 @@ public sealed class VanillaDownloadsViewModel : INotifyPropertyChanged, IDisposa
         {
             IsLoading = false;
         }
+    }
+
+    private async Task<Result<Unit>> ReloadSelectionStateAsync(CancellationToken cancellationToken)
+    {
+        if (settingsRepository is not null)
+        {
+            Result<LauncherSettings> loadedSettings = await settingsRepository.LoadAsync(cancellationToken);
+            if (!loadedSettings.IsSuccess)
+            {
+                return Result<Unit>.Failure(loadedSettings.Problem!);
+            }
+
+            settings = loadedSettings.Value;
+        }
+
+        if (gameRootRepository is null)
+        {
+            return Result.Success();
+        }
+
+        gameRoots = (await gameRootRepository.GetAllAsync(cancellationToken))
+            .OrderBy(static root => root.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static root => root.Id, StringComparer.Ordinal)
+            .ToArray();
+        OnPropertyChanged(nameof(GameRoots));
+
+        GameRoot? configured = settings?.SelectedGameRootId is string selectedId
+            ? gameRoots.FirstOrDefault(root => string.Equals(root.Id, selectedId, StringComparison.Ordinal))
+            : null;
+        GameRoot? next = configured ?? gameRoots.FirstOrDefault(static root => root.Availability == GameRootAvailability.Available);
+        if (!ReferenceEquals(selectedRoot, next))
+        {
+            selectedRoot = next;
+            installPlan = null;
+            isInstallConfirmationOpen = false;
+            OnPropertyChanged(nameof(SelectedRoot));
+            OnPropertyChanged(nameof(IsInstallConfirmationOpen));
+            OnPropertyChanged(nameof(InstallSummary));
+            OnPropertyChanged(nameof(CanPrepareInstall));
+            NotifyCommandState();
+        }
+
+        return Result.Success();
     }
 
     public async Task PrepareInstallAsync(GameRoot root, CancellationToken cancellationToken)

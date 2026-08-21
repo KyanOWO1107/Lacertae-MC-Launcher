@@ -31,6 +31,12 @@ public sealed class ResolveLocalResourceFolders
             {
                 return Result<LocalResourceFolders>.Failure(Problem("RESOURCE_ROOT_INVALID"));
             }
+
+            if ((Directory.Exists(shared) && !SecureFileSystem.IsSafeDirectory(shared)) ||
+                (Directory.Exists(normalized) && !SecureFileSystem.IsSafeDirectory(normalized, shared)))
+            {
+                return Result<LocalResourceFolders>.Failure(Problem("RESOURCE_ROOT_INVALID"));
+            }
             LocalResourceFolder[] folders = StandardFolderNames
                 .Select(name => new LocalResourceFolder(name, Path.GetFullPath(Path.Combine(normalized, name)), Exists(Path.Combine(normalized, name))))
                 .ToArray();
@@ -62,7 +68,7 @@ public sealed class ResolveLocalResourceFolders
         LocalResourceFolder folder = resolved.Value[standard];
         try
         {
-            if (fileSystem is null) Directory.CreateDirectory(folder.NormalizedPath);
+            if (fileSystem is null) SecureFileSystem.EnsureDirectory(folder.NormalizedPath, resolved.Value.RootPath);
             else fileSystem.CreateDirectory(folder.NormalizedPath);
             return Result<LocalResourceFolder>.Success(folder with { Exists = true });
         }
@@ -75,7 +81,7 @@ public sealed class ResolveLocalResourceFolders
     private static string? SelectRoot(string shared, string? isolated) =>
         !string.IsNullOrWhiteSpace(isolated) ? isolated : !string.IsNullOrWhiteSpace(shared) ? shared : null;
 
-    private bool Exists(string path) => fileSystem?.DirectoryExists(path) ?? Directory.Exists(path);
+    private bool Exists(string path) => fileSystem?.DirectoryExists(path) ?? SecureFileSystem.IsSafeDirectory(path);
 
     private static bool IsWithin(string path, string root)
     {

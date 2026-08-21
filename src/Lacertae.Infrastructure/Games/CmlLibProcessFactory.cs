@@ -7,6 +7,7 @@ using CmlLib.Core.Version;
 using CmlLib.Core.VersionLoader;
 using CmlLib.Core.VersionMetadata;
 using Lacertae.Application.Games;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Launch;
 using Lacertae.Domain.Problems;
@@ -37,6 +38,17 @@ public sealed class CmlLibProcessFactory
                 return Result<GameProcessSpec>.Failure(Problem("GAME_PROCESS_PATH_OUTSIDE_ROOT"));
             }
 
+            if (!SecureFileSystem.IsSafeDirectory(root) ||
+                !SecureFileSystem.IsSafeDirectory(gameDirectory, root) ||
+                !SecureFileSystem.IsSafeFile(
+                    plan.JavaExecutablePath,
+                    Path.GetDirectoryName(Path.GetFullPath(plan.JavaExecutablePath))!))
+            {
+                return Result<GameProcessSpec>.Failure(Problem("GAME_PROCESS_PATH_UNSAFE"));
+            }
+
+            using IDisposable rootLease = SecureFileSystem.OpenDirectoryLease(root);
+            using IDisposable gameDirectoryLease = SecureFileSystem.OpenDirectoryLease(gameDirectory, root);
             MinecraftPath path = new(gameDirectory, root)
             {
                 Library = Path.Combine(root, "libraries"),
@@ -50,6 +62,14 @@ public sealed class CmlLibProcessFactory
             AssertSharedPath(path.Resource, root);
             AssertSharedPath(path.Assets, root);
             AssertSharedPath(path.Runtime, root);
+
+            foreach (string sharedPath in new[] { path.Library, path.Versions, path.Resource, path.Assets, path.Runtime })
+            {
+                if (Directory.Exists(sharedPath) && !SecureFileSystem.IsSafeDirectory(sharedPath, root))
+                {
+                    return Result<GameProcessSpec>.Failure(Problem("GAME_PROCESS_PATH_UNSAFE"));
+                }
+            }
 
             LocalJsonVersionLoader loader = new(path);
             VersionMetadataCollection metadata = await loader.GetVersionMetadatasAsync(cancellationToken);
@@ -75,6 +95,12 @@ public sealed class CmlLibProcessFactory
                 return Result<GameProcessSpec>.Failure(Problem("GAME_PROCESS_EXECUTABLE_MISSING"));
             }
 
+            string executablePath = Path.GetFullPath(startInfo.FileName);
+            if (!SecureFileSystem.IsSafeFile(executablePath, Path.GetDirectoryName(executablePath)!))
+            {
+                return Result<GameProcessSpec>.Failure(Problem("GAME_PROCESS_PATH_UNSAFE"));
+            }
+
             Result<string[]> parsedArguments = WindowsCommandLineParser.Parse(startInfo.Arguments ?? string.Empty);
             if (!parsedArguments.IsSuccess)
             {
@@ -85,7 +111,7 @@ public sealed class CmlLibProcessFactory
                 .Select(static argument => new SensitiveString(argument))
                 .ToArray();
             return Result<GameProcessSpec>.Success(new GameProcessSpec(
-                Path.GetFullPath(startInfo.FileName),
+                executablePath,
                 arguments,
                 gameDirectory,
                 new Dictionary<string, SensitiveString>(StringComparer.Ordinal),

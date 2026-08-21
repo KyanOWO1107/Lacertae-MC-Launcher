@@ -38,6 +38,8 @@ jobs:
       - name: Upload unsigned candidate
         uses: actions/upload-artifact@v4
         with:
-          name: lacertae-win-x64-${{ inputs.version }}
+          # Keep untrusted dispatch input out of the artifact identifier. The
+          # validated SemVer remains in the package filename and manifest.
+          name: lacertae-win-x64-candidate
           path: artifacts/release-candidate
           if-no-files-found: error

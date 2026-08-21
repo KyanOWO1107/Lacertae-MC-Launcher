@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Lacertae.Application.Java;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Accounts;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.GameRoots;
@@ -84,6 +85,11 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
                 request.VersionOverride.Isolation);
             gameDirectory = isolation.IsIsolated ? versionPath : root;
             if (!IsUnderRoot(gameDirectory, root))
+            {
+                return Result<LaunchPlan>.Failure(InvalidProblem("LAUNCH_PLAN_PATH_INVALID"));
+            }
+
+            if (!SecureFileSystem.IsSafeDirectory(root))
             {
                 return Result<LaunchPlan>.Failure(InvalidProblem("LAUNCH_PLAN_PATH_INVALID"));
             }
@@ -311,7 +317,7 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
         !string.IsNullOrWhiteSpace(request.GameRoot.NormalizedPath) &&
         request.GameRoot.Availability == GameRootAvailability.Available &&
         string.Equals(request.Version.GameRootId, request.GameRoot.Id, StringComparison.Ordinal) &&
-        IsSafeSegment(request.Version.FolderName) &&
+        VersionFolderPolicy.IsSafe(request.Version.FolderName) &&
         string.Equals(request.VersionOverride.GameRootId, request.GameRoot.Id, StringComparison.Ordinal) &&
         string.Equals(request.VersionOverride.VersionFolder, request.Version.FolderName, StringComparison.Ordinal);
 
@@ -322,10 +328,6 @@ public sealed class FreezeLaunchPlan(TimeProvider? timeProvider = null)
         return string.Equals(normalizedPath, normalizedRoot, StringComparison.OrdinalIgnoreCase) ||
             normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsSafeSegment(string value) =>
-        !string.IsNullOrWhiteSpace(value) && value.Length <= 128 && value is not "." and not ".." &&
-        value.All(static character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     private static Problem InvalidProblem(string code) => new(
         code,

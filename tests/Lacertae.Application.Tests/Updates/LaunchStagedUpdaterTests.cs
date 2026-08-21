@@ -42,6 +42,26 @@ public sealed class LaunchStagedUpdaterTests
         Assert.Equal("UPDATE_ACTIVE_OPERATION", active.Problem?.Code);
     }
 
+    [Fact]
+    public async Task LaunchRejectsAnUpdaterOutsideTheInstalledLauncher()
+    {
+        using TemporaryRoot root = new();
+        string outsideUpdater = Path.Combine(root.RootPath, "outside-updater.exe");
+        File.WriteAllText(outsideUpdater, "stub");
+
+        LaunchStagedUpdaterRequest request = root.Request(true, false, false) with
+        {
+            UpdaterExecutablePath = outsideUpdater,
+        };
+
+        var result = await new LaunchStagedUpdater(new FakeStarter()).ExecuteAsync(
+            request,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal("UPDATE_PLAN_ROOT_INVALID", result.Problem?.Code);
+    }
+
     private sealed class FakeStarter : IUpdaterProcessStarter
     {
         public string? PlanPath { get; private set; }
@@ -63,12 +83,13 @@ public sealed class LaunchStagedUpdaterTests
             Root = Path.Combine(Path.GetTempPath(), "lacertae-launch-update-" + Guid.NewGuid().ToString("N"));
             UpdatesPath = Path.Combine(Root, "updates");
             InstallPath = Path.Combine(Root, "install");
-            StagingPath = Path.Combine(Root, "staging");
-            BackupPath = Path.Combine(Root, "backup");
+            StagingPath = Path.Combine(UpdatesPath, "staging");
+            BackupPath = Path.Combine(UpdatesPath, "backup");
             Directory.CreateDirectory(UpdatesPath);
             Directory.CreateDirectory(InstallPath);
             Directory.CreateDirectory(StagingPath);
-            UpdaterPath = Path.Combine(Root, "updater.exe");
+            UpdaterPath = Path.Combine(InstallPath, "Updater", "updater.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(UpdaterPath)!);
             File.WriteAllText(UpdaterPath, "stub");
         }
 
@@ -78,6 +99,8 @@ public sealed class LaunchStagedUpdaterTests
         private string StagingPath { get; }
         private string BackupPath { get; }
         private string UpdaterPath { get; }
+
+        public string RootPath => Root;
 
         public LaunchStagedUpdaterRequest Request(bool confirmed, bool gameRunning, bool installRunning) => new(
             UpdaterPath,

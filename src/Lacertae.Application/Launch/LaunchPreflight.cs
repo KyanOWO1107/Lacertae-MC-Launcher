@@ -1,5 +1,6 @@
 using Lacertae.Application.Install;
 using Lacertae.Application.Java;
+using Lacertae.Application.Storage;
 using Lacertae.Application.Versions;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Downloads;
@@ -53,6 +54,11 @@ public sealed class LaunchPreflight : ILaunchPreflight
         }
 
         if (!environment.DirectoryExists(root))
+        {
+            failureCodes.Add("LAUNCH_ROOT_UNAVAILABLE");
+            suggestedActions.Add("action.game_root.locate");
+        }
+        else if (!SecureFileSystem.IsSafeDirectory(root))
         {
             failureCodes.Add("LAUNCH_ROOT_UNAVAILABLE");
             suggestedActions.Add("action.game_root.locate");
@@ -150,7 +156,13 @@ public sealed class LaunchPreflight : ILaunchPreflight
 
         try
         {
-            Directory.CreateDirectory(gameDirectory);
+            SecureFileSystem.EnsureDirectory(gameDirectory, root);
+            if (!SecureFileSystem.IsSafeDirectory(gameDirectory, root))
+            {
+                failureCodes.Add("LAUNCH_GAME_DIRECTORY_UNAVAILABLE");
+                suggestedActions.Add("action.launch.review_settings");
+                return;
+            }
         }
         catch (IOException)
         {
@@ -159,6 +171,12 @@ public sealed class LaunchPreflight : ILaunchPreflight
             return;
         }
         catch (UnauthorizedAccessException)
+        {
+            failureCodes.Add("LAUNCH_GAME_DIRECTORY_UNAVAILABLE");
+            suggestedActions.Add("action.launch.review_settings");
+            return;
+        }
+        catch (NotSupportedException)
         {
             failureCodes.Add("LAUNCH_GAME_DIRECTORY_UNAVAILABLE");
             suggestedActions.Add("action.launch.review_settings");
@@ -209,7 +227,19 @@ public sealed class LaunchPreflight : ILaunchPreflight
         CancellationToken cancellationToken)
     {
         string executable = plan.JavaExecutablePath;
-        if (!Path.IsPathFullyQualified(executable) || !File.Exists(executable))
+        string? executableDirectory;
+        try
+        {
+            executableDirectory = Path.GetDirectoryName(Path.GetFullPath(executable));
+        }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException)
+        {
+            executableDirectory = null;
+        }
+
+        if (!Path.IsPathFullyQualified(executable) ||
+            executableDirectory is null ||
+            !SecureFileSystem.IsSafeFile(executable, executableDirectory))
         {
             failureCodes.Add("LAUNCH_JAVA_MISSING");
             suggestedActions.Add("action.java.install_or_select");
@@ -271,7 +301,7 @@ public sealed class LaunchPreflight : ILaunchPreflight
                 continue;
             }
 
-            if (!IsUnderRoot(path, root) || !File.Exists(path))
+            if (!IsUnderRoot(path, root) || !SecureFileSystem.IsSafeFile(path, root))
             {
                 damagedArtifacts.Add(artifact.ArtifactId);
                 continue;
@@ -279,7 +309,8 @@ public sealed class LaunchPreflight : ILaunchPreflight
 
             try
             {
-                if (new FileInfo(path).Length != artifact.ExpectedSize)
+                using Stream stream = SecureFileSystem.OpenRead(path, root);
+                if (stream.Length != artifact.ExpectedSize)
                 {
                     damagedArtifacts.Add(artifact.ArtifactId);
                     continue;

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Common;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -73,8 +74,8 @@ public sealed class LaunchStagedUpdater
             string updatesPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(request.UpdatesPath));
             string planPath = Path.Combine(updatesPath, "apply-plan.json");
             string healthPath = ConfirmUpdateHealth.GetHealthFilePath(updatesPath, request.HealthNonce);
-            Directory.CreateDirectory(updatesPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(healthPath)!);
+            SecureFileSystem.EnsureDirectory(updatesPath);
+            SecureFileSystem.EnsureDirectory(Path.GetDirectoryName(healthPath)!, updatesPath);
             UpdateApplyPlan plan = new(
                 Environment.ProcessId,
                 Path.GetFullPath(Environment.ProcessPath ?? throw new InvalidOperationException("Launcher path is unavailable.")),
@@ -88,9 +89,7 @@ public sealed class LaunchStagedUpdater
                 request.OldManifestFiles.ToArray(),
                 request.NewManifestFiles.ToArray());
             byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(plan, JsonOptions);
-            string temporaryPath = planPath + ".tmp";
-            await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
-            File.Move(temporaryPath, planPath, overwrite: true);
+            await SecureFileSystem.WriteAtomicallyAsync(planPath, bytes, cancellationToken, updatesPath);
             Result<Unit> started = processStarter.Start(
                 Path.GetFullPath(request.UpdaterExecutablePath),
                 Path.GetDirectoryName(Path.GetFullPath(request.UpdaterExecutablePath))!,
@@ -149,10 +148,17 @@ public sealed class LaunchStagedUpdater
             return "UPDATE_PLAN_INVALID";
         }
 
-        if (!File.Exists(request.UpdaterExecutablePath) || !Directory.Exists(request.InstallDirectory) ||
-            !Directory.Exists(request.StagingDirectory))
+        if (!SecureFileSystem.IsSafeFile(request.UpdaterExecutablePath, request.InstallDirectory) ||
+            !SecureFileSystem.IsSafeDirectory(request.InstallDirectory) ||
+            !SecureFileSystem.IsSafeDirectory(request.StagingDirectory, request.UpdatesPath) ||
+            !IsUnderRoot(request.BackupDirectory, request.UpdatesPath))
         {
             return "UPDATE_PLAN_ROOT_INVALID";
+        }
+
+        if (!IsUnderRoot(request.UpdaterExecutablePath, request.InstallDirectory))
+        {
+            return "UPDATE_UPDATER_PATH_INVALID";
         }
 
         return null;
@@ -161,6 +167,17 @@ public sealed class LaunchStagedUpdater
     private static bool IsAbsolutePath(string value) =>
         !string.IsNullOrWhiteSpace(value) && Path.IsPathFullyQualified(value) &&
         string.Equals(Path.GetFullPath(value), value, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+
+    private static bool IsUnderRoot(string path, string root)
+    {
+        string normalizedPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+        string normalizedRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        StringComparison comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        return string.Equals(normalizedPath, normalizedRoot, comparison) ||
+            normalizedPath.StartsWith(normalizedRoot + Path.DirectorySeparatorChar, comparison);
+    }
 
     private static bool IsNonce(string value) =>
         !string.IsNullOrWhiteSpace(value) && value.Length is >= 16 and <= 128 &&

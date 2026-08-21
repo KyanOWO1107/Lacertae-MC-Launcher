@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Security.Cryptography;
 using Lacertae.Application.Install;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Downloads;
 using Lacertae.Domain.Problems;
 using Lacertae.Domain.Results;
@@ -24,11 +25,6 @@ public sealed class StreamingGameFileVerifier : IGameFileVerifier
 
         try
         {
-            if (!File.Exists(filePath) || new FileInfo(filePath).Length != artifact.ExpectedSize)
-            {
-                return Result<bool>.Success(false);
-            }
-
             Dictionary<string, IncrementalHash> hashes = artifact.Hashes
                 .Select(static hash => hash.NormalizedAlgorithm)
                 .Distinct(StringComparer.Ordinal)
@@ -39,13 +35,11 @@ public sealed class StreamingGameFileVerifier : IGameFileVerifier
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
             try
             {
-                await using FileStream stream = new(
-                    filePath,
-                    FileMode.Open,
-                    FileAccess.Read,
-                    FileShare.Read,
-                    BufferSize,
-                    FileOptions.Asynchronous | FileOptions.SequentialScan);
+                await using Stream stream = SecureFileSystem.OpenRead(filePath);
+                if (stream.Length != artifact.ExpectedSize)
+                {
+                    return Result<bool>.Success(false);
+                }
                 long readTotal = 0;
                 while (true)
                 {
@@ -99,6 +93,14 @@ public sealed class StreamingGameFileVerifier : IGameFileVerifier
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (FileNotFoundException)
+        {
+            return Result<bool>.Success(false);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return Result<bool>.Success(false);
         }
         catch (IOException)
         {

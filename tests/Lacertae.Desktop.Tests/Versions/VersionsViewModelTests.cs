@@ -130,22 +130,60 @@ public sealed class VersionsViewModelTests
     }
 
     [Fact]
+    public async Task LoadRefreshesSettingsAndFindsRootAddedAfterPageConstruction()
+    {
+        MutableRootRepository roots = new();
+        FakeSettingsRepository settings = new();
+        VersionsViewModel viewModel = new(
+            roots,
+            new ListGameVersions(
+                new FakeGameEngine([
+                    Descriptor("root-b", "second", "Second", "release", false),
+                ]),
+                new FakeOverrideRepository()),
+            LauncherSettings.Default,
+            settingsRepository: settings);
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        GameRoot first = Root("root-a", "A", GameRootAvailability.Available);
+        GameRoot second = Root("root-b", "B", GameRootAvailability.Available);
+        roots.Values.Add(first);
+        roots.Values.Add(second);
+        settings.Current = LauncherSettings.Default with { SelectedGameRootId = second.Id };
+
+        await viewModel.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(second.Id, viewModel.SelectedGameRoot?.Id);
+        Assert.Equal(["second"], viewModel.Versions.Select(static row => row.FolderName));
+    }
+
+    [Fact]
     public async Task OpenDirectoryUsesOnlyLoadedVersionPath()
     {
         GameRoot root = Root("root", "Root", GameRootAvailability.Available);
+        string versionPath = Path.Combine(root.NormalizedPath, "versions", "1.21.1");
+        Directory.CreateDirectory(versionPath);
         FakeDialogService dialogs = new();
-        VersionsViewModel viewModel = new(
-            new FakeRootRepository([root]),
-            new ListGameVersions(
-                new FakeGameEngine([Descriptor("root", "1.21.1", "1.21.1", "release", false)]),
-                new FakeOverrideRepository()),
-            LauncherSettings.Default,
-            dialogs);
-        await viewModel.LoadAsync(CancellationToken.None);
+        try
+        {
+            VersionsViewModel viewModel = new(
+                new FakeRootRepository([root]),
+                new ListGameVersions(
+                    new FakeGameEngine([Descriptor("root", "1.21.1", "1.21.1", "release", false)]),
+                    new FakeOverrideRepository()),
+                LauncherSettings.Default,
+                dialogs);
+            await viewModel.LoadAsync(CancellationToken.None);
 
-        viewModel.OpenDirectory(viewModel.Versions[0]);
+            viewModel.OpenDirectory(viewModel.Versions[0]);
 
-        Assert.Equal(Path.GetFullPath(Path.Combine(root.NormalizedPath, "versions", "1.21.1")), dialogs.LastPath);
+            Assert.Equal(Path.GetFullPath(versionPath), dialogs.LastPath);
+        }
+        finally
+        {
+            Directory.Delete(root.NormalizedPath, recursive: true);
+        }
     }
 
     private static GameRoot Root(string id, string name, GameRootAvailability availability) =>
@@ -167,6 +205,30 @@ public sealed class VersionsViewModelTests
 
         public Task<Result<Unit>> RemoveAsync(string id, CancellationToken cancellationToken) =>
             Task.FromResult(Result.Success());
+    }
+
+    private sealed class MutableRootRepository : IGameRootRepository
+    {
+        public List<GameRoot> Values { get; } = [];
+
+        public Task<IReadOnlyList<GameRoot>> GetAllAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<GameRoot>>(Values.ToArray());
+
+        public Task<GameRoot?> FindByNormalizedPathAsync(string normalizedPath, CancellationToken cancellationToken) =>
+            Task.FromResult(Values.FirstOrDefault(root => root.NormalizedPath == normalizedPath));
+
+        public Task<Result<Unit>> UpsertAsync(GameRoot gameRoot, CancellationToken cancellationToken)
+        {
+            Values.RemoveAll(root => root.Id == gameRoot.Id);
+            Values.Add(gameRoot);
+            return Task.FromResult(Result.Success());
+        }
+
+        public Task<Result<Unit>> RemoveAsync(string id, CancellationToken cancellationToken)
+        {
+            Values.RemoveAll(root => root.Id == id);
+            return Task.FromResult(Result.Success());
+        }
     }
 
     private sealed class FakeGameEngine(IReadOnlyList<GameVersionDescriptor> descriptors) : IGameEngine
@@ -246,12 +308,15 @@ public sealed class VersionsViewModelTests
     {
         public LauncherSettings? LastSaved { get; private set; }
 
+        public LauncherSettings Current { get; set; } = LauncherSettings.Default;
+
         public Task<Result<LauncherSettings>> LoadAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(Result<LauncherSettings>.Success(LauncherSettings.Default));
+            Task.FromResult(Result<LauncherSettings>.Success(Current));
 
         public Task<Result<Unit>> SaveAsync(LauncherSettings settings, CancellationToken cancellationToken)
         {
             LastSaved = settings;
+            Current = settings;
             return Task.FromResult(Result.Success());
         }
     }

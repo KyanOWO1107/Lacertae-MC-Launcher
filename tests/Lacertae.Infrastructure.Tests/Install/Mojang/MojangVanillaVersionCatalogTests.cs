@@ -45,6 +45,34 @@ public sealed class MojangVanillaVersionCatalogTests
     }
 
     [Fact]
+    public async Task ListAsyncAcceptsOfficialVersionIdsContainingSpaces()
+    {
+        const string manifest = """
+            {
+              "versions": [
+                {
+                  "id": "1.14.2 Pre-Release 4",
+                  "type": "snapshot",
+                  "url": "https://piston-meta.mojang.com/v1/packages/release.json",
+                  "releaseTime": "2019-05-27T00:21:11-07:00",
+                  "sha1": "0123456789abcdef0123456789abcdef01234567"
+                }
+              ]
+            }
+            """;
+
+        MojangVanillaMetadataSource source = new(new MojangVanillaMetadataSourceOptions
+        {
+            VersionManifestJson = manifest,
+        });
+
+        var result = await source.ListAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(result.IsSuccess, result.Problem?.Code);
+        Assert.Equal("1.14.2 Pre-Release 4", Assert.Single(result.Value).Id);
+    }
+
+    [Fact]
     public async Task ListAsyncRejectsUntrustedManifestUriAndMalformedHash()
     {
         const string manifest = """

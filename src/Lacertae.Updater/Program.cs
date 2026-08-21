@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Lacertae.Application.Storage;
 using Lacertae.Domain.Updates;
 using Lacertae.Updater;
 
@@ -13,7 +14,14 @@ int exitCode;
 try
 {
     UpdaterArguments arguments = UpdaterArguments.Parse(args);
-    string planJson = await File.ReadAllTextAsync(arguments.PlanPath);
+    string planJson;
+    await using (Stream stream = SecureFileSystem.OpenReadExclusive(
+                       arguments.PlanPath,
+                       Path.GetDirectoryName(arguments.PlanPath)!))
+    using (StreamReader reader = new(stream))
+    {
+        planJson = await reader.ReadToEndAsync();
+    }
     UpdateApplyPlan? plan = JsonSerializer.Deserialize<UpdateApplyPlan>(planJson, jsonOptions);
     if (plan is null)
     {

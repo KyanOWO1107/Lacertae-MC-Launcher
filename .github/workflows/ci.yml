@@ -13,6 +13,14 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Verify repository text line endings
+        shell: pwsh
+        run: |
+          $bad = git ls-files --eol | Select-String 'w/crlf'
+          if ($bad) {
+            $bad | ForEach-Object { Write-Error $_.Line }
+            exit 1
+          }
       - uses: actions/setup-dotnet@v5
         with:
           global-json-file: global.json

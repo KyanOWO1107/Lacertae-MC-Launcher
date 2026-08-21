@@ -74,6 +74,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private LauncherPageViewModel currentPage;
     private bool hasStartupState;
     private bool isOnboardingVisible;
+    private string? lastOnboardingGameRootId;
     private HomeViewModel home;
     private readonly RepairPreviewViewModel repairPreview = new();
     private readonly DelegateCommand openOnboardingCommand;
@@ -113,6 +114,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SelectRoute(currentRouteId);
         Onboarding = new OnboardingViewModel();
         Onboarding.PropertyChanged += OnboardingPropertyChanged;
+        lastOnboardingGameRootId = Onboarding.DurableState.GameRootId;
         repairPreview.PropertyChanged += RepairPreviewPropertyChanged;
         OpenRepairPreviewCommand = new DelegateCommand(OpenRepairPreview, () => true);
         CloseRepairPreviewCommand = repairPreview.CloseCommand;
@@ -301,6 +303,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             microsoftLoginConfigured: microsoftLoginConfigured,
             microsoftConfigurationErrorCode: microsoftConfigurationErrorCode);
         Onboarding.PropertyChanged += OnboardingPropertyChanged;
+        lastOnboardingGameRootId = Onboarding.DurableState.GameRootId;
         IsOnboardingVisible = preflightState?.CanFormLaunchPreflight != true;
         OnPropertyChanged(nameof(HasStartupState));
         OnPropertyChanged(nameof(CanOpenOnboarding));
@@ -629,6 +632,43 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             if (Onboarding.IsComplete && Onboarding.CanLaunch && !Onboarding.IsDeferredSetup)
             {
                 IsOnboardingVisible = false;
+            }
+        }
+
+        if (e.PropertyName == nameof(OnboardingViewModel.DurableState))
+        {
+            string? gameRootId = Onboarding.DurableState.GameRootId;
+            if (!string.Equals(gameRootId, lastOnboardingGameRootId, StringComparison.Ordinal))
+            {
+                lastOnboardingGameRootId = gameRootId;
+                _ = RefreshFeaturePagesAfterOnboardingAsync();
+            }
+        }
+    }
+
+    private async Task RefreshFeaturePagesAfterOnboardingAsync()
+    {
+        if (versions is not null)
+        {
+            try
+            {
+                await versions.LoadAsync(CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // The versions page keeps its typed error state.
+            }
+        }
+
+        if (downloads is not null)
+        {
+            try
+            {
+                await downloads.LoadAsync(CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException)
+            {
+                // The downloads page keeps its typed error state.
             }
         }
     }

@@ -125,7 +125,7 @@ public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource, IVanil
                     StrictJsonReader.RequiredString(version, "url"),
                     "version metadata");
                 string metadataSha1 = RequiredSha1(version, "sha1");
-                if (!IsSafeSegment(id) || string.IsNullOrWhiteSpace(type) || !ids.Add(id))
+                if (!VersionFolderPolicy.IsSafe(id) || string.IsNullOrWhiteSpace(type) || !ids.Add(id))
                 {
                     throw new InvalidDataException("Version manifest entry is invalid or duplicated.");
                 }
@@ -159,7 +159,7 @@ public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource, IVanil
         CancellationToken cancellationToken)
     {
         string id = StrictJsonReader.RequiredString(root, "id");
-        if (!string.Equals(id, requestedVersionId, StringComparison.Ordinal) || !IsSafeSegment(id))
+        if (!string.Equals(id, requestedVersionId, StringComparison.Ordinal) || !VersionFolderPolicy.IsSafe(id))
         {
             throw new InvalidDataException("Version ID does not match the requested release.");
         }
@@ -601,10 +601,6 @@ public sealed class MojangVanillaMetadataSource : IVanillaMetadataSource, IVanil
 #pragma warning restore CA5350
         return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
     }
-
-    private static bool IsSafeSegment(string value) =>
-        value.Length <= 128 && value is not "." and not ".." &&
-        value.All(character => char.IsAsciiLetterOrDigit(character) || character is '.' or '-' or '_');
 
     private static bool IsSafeRelativePath(string path) =>
         !string.IsNullOrWhiteSpace(path) && !path.Contains('\0') &&
